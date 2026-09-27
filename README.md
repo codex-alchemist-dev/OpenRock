@@ -53,7 +53,9 @@ before touching any phase past this one.
   alternative-set support - see the file header).
 - `test/` - `kernel.test.js`, `semver.test.js`, `resolver.test.js`, plus
   dummy fixture libraries `kernel.test.js` loads.
-- `libs/` - local library dev checkouts (empty for now).
+- `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B:
+  `@openrock/registries` so far, more to follow) plus local library dev
+  checkouts for anything else.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MCLite), pinned to
   `github.com/codex-alchemist-dev/{MinUI,MCLite}`.
@@ -99,6 +101,24 @@ every absent optional/soft edge has already been dropped, so its own
 "Unknown library dependency" check only ever fires for a genuinely
 required-but-missing dependency.
 
+## API surface libraries (OR-Track B)
+
+Fabric/NeoForge-style shared building blocks, each a normal `kind:
+"library"` package under `libs/`, loadable by any mod/library via the same
+`dependsOn`/`libLoader.js` mechanism as anything else:
+
+- **`@openrock/registries`** (`libs/registries/`) - typed, STRICT registries
+  per Bedrock domain (items, custom components, recipes, loot-table
+  fragments, or any domain name a caller picks). Unlike `kernel.js`'s own
+  `createRegistry()` (which silently overwrites on a duplicate key - the
+  right default for hooks), `api.domain(name).register(id, def)` **throws**
+  if `id` already exists in that domain - two mods both defining
+  `cw:frost_bow` is a genuine content collision, and fails loudly at load
+  time instead of one mod's content silently vanishing.
+- More to follow: `@openrock/events`, `@openrock/networking`,
+  `@openrock/capabilities`, `@openrock/config`, `@openrock/datagen`,
+  `@openrock/compat`.
+
 ## Submodule workflow
 
 `vendor/minui` and `vendor/mclite` are real git submodules pinned to
@@ -125,7 +145,7 @@ version of MinUI/MCLite, check `git submodule status` first.
 ## Development
 
 ```bash
-npm test   # runs kernel.test.js, semver.test.js, and resolver.test.js
+npm test   # kernel, semver, resolver, registries-integration, and every libs/*/test
 ```
 
 ## Contributing
