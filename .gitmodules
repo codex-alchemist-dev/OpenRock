@@ -1,6 +1,6 @@
 [submodule "vendor/minui"]
 	path = vendor/minui
-	url = ../MinUI
+	url = https://github.com/codex-alchemist-dev/MinUI.git
 [submodule "vendor/mclite"]
 	path = vendor/mclite
-	url = ../MClite
+	url = https://github.com/codex-alchemist-dev/MCLite.git

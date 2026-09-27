@@ -8,7 +8,7 @@ non-trivial change before writing a lot of code against it.
 ## Ground rules
 
 - **No runtime dependencies.** This project (and everything it wraps -
-  MinUI, MClite) is deliberately dependency-free Node, resolved via plain
+  MinUI, MCLite) is deliberately dependency-free Node, resolved via plain
   `require()`/`import`, not npm packages. Keep it that way unless there's
   a very strong reason not to.
 - **`node --check` every file you touch** before opening a PR (`.js` files

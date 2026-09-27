@@ -9,7 +9,7 @@ a real addon yet).** `OpenChara`/`Claude Waifus` keep building via
 `node tools/openchara.js <cmd>` exactly as before - this repo has zero
 effect on that workflow until OR-Phase 6.
 
-The full phased design (manifest shape, library lifecycle, MClite's
+The full phased design (manifest shape, library lifecycle, MCLite's
 generalized API, submodule wiring, and the migration order with testing
 checkpoints for every phase) lives in the project's plan document under
 "OpenRock Mod Packager — Phased Implementation Plan". Read that before
@@ -24,7 +24,7 @@ touching any phase past this one.
   Depends on a library by name, never `provides` anything, carries the
   engine-facing fields (packs, character, content, rules) that get built
   into a real `.mcaddon`.
-- **MinUI** and **MClite** are git submodules under `vendor/`, pinned to a
+- **MinUI** and **MCLite** are git submodules under `vendor/`, pinned to a
   commit - real version tracking, replacing today's hardcoded relative
   paths (`../MinUI`, `../OpenChara`).
 - **Kernel**: `createRegistry(name, {validate})` generalizes the
@@ -42,18 +42,18 @@ touching any phase past this one.
 - `test/` - `kernel.test.js` plus dummy fixture libraries it loads.
 - `libs/` - local library dev checkouts (empty for now).
 - `mods/` - local mod dev checkouts (empty for now).
-- `vendor/` - git submodules (MinUI, MClite).
+- `vendor/` - git submodules (MinUI, MCLite).
 
 ## Submodule workflow
 
 **Submodule URLs are local paths for now** (`.gitmodules` points at
-`../MinUI`/`../MClite`, relative sibling checkouts) - proves the submodule
+`../MinUI`/`../MCLite`, relative sibling checkouts) - proves the submodule
 mechanics work without needing to push either repo's commits to GitHub
 first. Before this is real for any other machine/collaborator, repoint
 `.gitmodules` at the real GitHub URLs once those repos' current commits
 are pushed.
 
-MinUI and MClite are developed against their own standalone checkouts as
+MinUI and MCLite are developed against their own standalone checkouts as
 usual - `git submodule` doesn't change that. After committing a change in
 one of those repos, bump OpenRock's pointer to it:
 
@@ -67,7 +67,7 @@ git commit -m "Bump minui submodule"
 It's easy to forget this step - a submodule pointer that isn't bumped
 means OpenRock silently keeps using the OLD commit even though the actual
 MinUI checkout has moved on. If something in OpenRock behaves like an old
-version of MinUI/MClite, check `git submodule status` first.
+version of MinUI/MCLite, check `git submodule status` first.
 
 ## Development
 
