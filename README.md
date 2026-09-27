@@ -264,6 +264,14 @@ Tested against dummy fixture mods/libraries only
 invocations producing a genuine `.mcaddon` ZIP - never against real Claude
 Waifus, so none of OR-Track F0 carries cutover risk.
 
+**CLI philosophy (OR-Track H1)**: git-like subcommands, plain-text output
+by default, real meaningful exit codes (0 success, 1 failure - matched by
+every test above via `execFileSync`'s own throw-on-nonzero-exit
+behavior), and a `--json` mode for piping into other tools - `check` has
+one today (`{ok, name, bpFiles, rpFiles, ms}`, or `{ok: false, error}` on
+failure), the command most likely to be scripted as a pre-commit/CI gate;
+more commands get one as real automation needs them.
+
 ### Multi-mod dev mode (OR-Track F1)
 
 `openrock dev` accepts either a single mod directory (the behavior above)

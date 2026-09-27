@@ -7,7 +7,8 @@
 // today until OR-Track J's real, deliberate cutover.
 //
 //   openrock build  <modDir>   build into <modDir>/build/
-//   openrock check  <modDir>   build + validate only (nothing written)
+//   openrock check  <modDir>   build + validate only (nothing written; --json
+//                              for machine-readable output, OR-Track H1)
 //   openrock export <modDir>   build + write <modDir>/dist/<name> <version>.mcaddon
 //   openrock deploy <modDir>   build + sync into Minecraft's development pack folders
 //   openrock dev    <modDir>   deploy, then watch the mod and its vendored
@@ -76,11 +77,19 @@ function cmdBuild(modDir) {
     return r;
 }
 
-function cmdCheck(modDir) {
+// OR-Track H1: a --json mode, for piping into other tools rather than
+// scraping human-readable text - `check` is the first command to get one
+// (the one most likely to be scripted, e.g. as a pre-commit/CI gate).
+function cmdCheck(modDir, flags = []) {
     const t0 = Date.now();
     const r = buildMod(modDir, buildOpts(modDir));
-    const bpNote = r.bp ? `${r.bp.size} BP + ` : "(resource-pack-only) ";
-    console.log(`OK - ${r.manifest.name}: ${bpNote}${r.rp.size} RP files, all checks passed (${Date.now() - t0}ms).`);
+    const ms = Date.now() - t0;
+    if (flags.includes("--json")) {
+        console.log(JSON.stringify({ ok: true, name: r.manifest.name, bpFiles: r.bp ? r.bp.size : null, rpFiles: r.rp.size, ms }));
+    } else {
+        const bpNote = r.bp ? `${r.bp.size} BP + ` : "(resource-pack-only) ";
+        console.log(`OK - ${r.manifest.name}: ${bpNote}${r.rp.size} RP files, all checks passed (${ms}ms).`);
+    }
     return r;
 }
 
@@ -283,7 +292,7 @@ function main() {
     try {
         switch (cmd) {
             case "build": cmdBuild(modDir); break;
-            case "check": cmdCheck(modDir); break;
+            case "check": cmdCheck(modDir, flags); break;
             case "export": cmdExport(modDir); break;
             case "deploy": cmdDeploy(modDir); break;
             case "dev": cmdDev(modDir); break;
@@ -294,7 +303,8 @@ function main() {
                 process.exitCode = cmd ? 1 : 0;
         }
     } catch (e) {
-        console.error(e.message);
+        if (flags.includes("--json")) console.log(JSON.stringify({ ok: false, error: e.message }));
+        else console.error(e.message);
         process.exitCode = 1;
     }
 }

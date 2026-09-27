@@ -66,6 +66,34 @@ test("openrock check: validates without writing anything", () => {
     assert.strictEqual(fs.existsSync(path.join(modDir, "build")), false);
 });
 
+test("openrock check --json: emits machine-readable output (OR-Track H1)", () => {
+    const modDir = makeStandaloneMod();
+    const output = run(["check", modDir, "--json"]);
+    const parsed = JSON.parse(output);
+    assert.deepStrictEqual(parsed, { ok: true, name: "cli-test-mod", bpFiles: parsed.bpFiles, rpFiles: parsed.rpFiles, ms: parsed.ms });
+    assert.ok(parsed.bpFiles > 0);
+    assert.strictEqual(typeof parsed.ms, "number");
+});
+
+test("openrock check --json (resource-pack-only): bpFiles is null, not a count of nothing", () => {
+    const modDir = path.join(__dirname, "fixtures", "resource-only-mod");
+    const parsed = JSON.parse(run(["check", modDir, "--json"]));
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.bpFiles, null);
+});
+
+test("openrock check --json on a broken mod: emits a JSON error object, not a plain-text one", () => {
+    let threw = false;
+    try { run(["check", path.join(os.tmpdir(), "definitely-does-not-exist-openrock-test"), "--json"]); }
+    catch (e) {
+        threw = true;
+        const parsed = JSON.parse(e.stdout);
+        assert.strictEqual(parsed.ok, false);
+        assert.match(parsed.error, /No openrock\.mod\.json/);
+    }
+    assert.strictEqual(threw, true);
+});
+
 test("openrock export: produces a real .mcaddon (a valid, non-empty ZIP)", () => {
     const modDir = makeStandaloneMod();
     const output = run(["export", modDir]);
