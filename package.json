@@ -2,7 +2,7 @@
   "name": "openrock",
   "version": "0.1.0",
   "description": "OpenRock Mod Packager: a library system for Minecraft Bedrock addon development. Absorbs MinUI and MCLite as git submodules; OpenChara is its first library, Claude Waifus its first mod.",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "private": true,
   "bin": {
     "openrock": "bin/openrock.js"
