@@ -115,9 +115,18 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   if `id` already exists in that domain - two mods both defining
   `cw:frost_bow` is a genuine content collision, and fails loudly at load
   time instead of one mod's content silently vanishing.
+- **`@openrock/capabilities`** (`libs/capabilities/`) - a thin, typed
+  convenience layer directly on MCLite (a `"submodule"`-type dependency,
+  the first real consumer of `libLoader.js`'s submodule-resolution
+  support). `registerCapability(kind, schema)` generates a validator from a
+  flat field-name → type schema (`"string"`, `"number"`, `"boolean"`,
+  `"object"`, `"any"`, or `"<type>[]"`) and wraps MCLite's
+  `registerRecordKind` - "a capability" is just a typed MCLite record kind.
+  An explicit `validate()` can still be passed to override the
+  schema-generated one for anything the flat schema language can't
+  express.
 - More to follow: `@openrock/events`, `@openrock/networking`,
-  `@openrock/capabilities`, `@openrock/config`, `@openrock/datagen`,
-  `@openrock/compat`.
+  `@openrock/config`, `@openrock/datagen`, `@openrock/compat`.
 
 ## Submodule workflow
 
@@ -145,7 +154,7 @@ version of MinUI/MCLite, check `git submodule status` first.
 ## Development
 
 ```bash
-npm test   # kernel, semver, resolver, registries-integration, and every libs/*/test
+npm test   # kernel, semver, resolver, every *-integration.test.js, and every libs/*/test
 ```
 
 ## Contributing
