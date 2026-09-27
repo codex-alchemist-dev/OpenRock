@@ -4,8 +4,9 @@ An open-source library system for Minecraft Bedrock addon development.
 Plain JS/Node modules + a manifest.json (no custom DSL) for libraries and
 mods.
 
-**Status: OR-Phase 0-4 done, OR-Track A (manifest & dependency model v2)
-done. Nothing wired to a real addon yet.** `OpenChara`/`Claude Waifus` keep
+**Status: OR-Phase 0-4 done. OR-Track A (manifest & dependency model v2)
+and OR-Track B (all seven API-surface libraries) done. Nothing wired to a
+real addon yet.** `OpenChara`/`Claude Waifus` keep
 building via `node tools/openchara.js <cmd>` exactly as before - this repo
 has zero effect on that workflow until OR-Track F0 (the real CLI) and
 OR-Track J (the actual cutover).
@@ -57,10 +58,10 @@ before touching any phase past this one.
   `compat.test.js`, plus a `*-integration.test.js` per feature that needs a
   real `loadLibraries()` call to prove (not just the unit's own isolated
   logic), and dummy fixture libraries `kernel.test.js` loads.
-- `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B:
-  `@openrock/registries`, `@openrock/capabilities`, `@openrock/compat`,
-  `@openrock/config`, `@openrock/events`, `@openrock/networking` so far,
-  more to follow) plus local library dev
+- `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B,
+  now complete: `@openrock/registries`, `@openrock/capabilities`,
+  `@openrock/compat`, `@openrock/config`, `@openrock/events`,
+  `@openrock/networking`, `@openrock/datagen`) plus local library dev
   checkouts for anything else.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MCLite), pinned to
@@ -187,7 +188,17 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   with a regression test locking it in. Never imports `@minecraft/server`
   (`bindTransport({send, subscribe})` is supplied by the real bootstrap
   code).
-- More to follow: `@openrock/datagen`.
+- **`@openrock/datagen`** (`libs/datagen/`) - Node-side, build-time-only
+  typed builders for Bedrock content JSON: `buildShapelessRecipe`,
+  `buildShapedRecipe`, `buildFurnaceRecipe`, `buildLootTable`, `buildItem`,
+  `buildBlock`. Nothing here runs in-game; a future OR-Track F0 CLI is what
+  actually calls these at package time and writes the results to files.
+  Deliberately scoped to the common, well-documented shapes - not every
+  possible recipe/component variant - with structural validation
+  (namespaced ids, required fields) on every builder.
+
+**All seven OR-Track B API-surface libraries are now built**: `registries`,
+`capabilities`, `compat`, `config`, `events`, `networking`, `datagen`.
 
 ## Submodule workflow
 
