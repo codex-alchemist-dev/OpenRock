@@ -94,6 +94,28 @@ test("openrock deploy: writes into OPENROCK_COM_MOJANG's development pack folder
     assert.ok(fs.existsSync(path.join(fakeComMojang, "development_resource_packs", "CLI Test R", "manifest.json")));
 });
 
+test("openrock build (resource-pack-only): produces only a resource pack, no behavior pack folder at all", () => {
+    const modDir = path.join(__dirname, "fixtures", "resource-only-mod");
+    const buildOut = path.join(modDir, "build");
+    if (fs.existsSync(buildOut)) fs.rmSync(buildOut, { recursive: true, force: true });
+    try {
+        const output = run(["build", modDir]);
+        assert.match(output, /Built resource-only-mod/);
+        assert.ok(fs.existsSync(path.join(buildOut, "Resource Only R", "manifest.json")));
+        assert.strictEqual(fs.readdirSync(buildOut).length, 1, "expected only the resource pack folder, no behavior pack folder");
+    } finally {
+        fs.rmSync(buildOut, { recursive: true, force: true });
+    }
+});
+
+test("openrock debug (resource-pack-only): refuses - there are no scripts to debug", () => {
+    const modDir = path.join(__dirname, "fixtures", "resource-only-mod");
+    let threw = false;
+    try { run(["debug", modDir, "--launch-vscode"]); }
+    catch (e) { threw = true; assert.match(e.stderr ?? e.message, /no scripts to debug/); }
+    assert.strictEqual(threw, true);
+});
+
 test("openrock log --filter=<regex>: narrows the tailer to a caller-chosen pattern (OR-Track C1)", () => {
     const modDir = makeStandaloneMod();
     const fakeLogDir = fs.mkdtempSync(path.join(os.tmpdir(), "openrock-cli-logs-"));

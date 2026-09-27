@@ -182,6 +182,33 @@ test("validateManifest: rejects a mod manifest with an incomplete packs.behavior
     assert.throws(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", ...p }), /packs\.behavior\.scriptModuleUuid is required/);
 });
 
+// ---- validateManifest: OR-Track G (resource-pack-only mods) --------------
+
+test("validateManifest: accepts packs.behavior: false for a resource-pack-only mod", () => {
+    const { resource } = validModPacks().packs;
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", namespace: "cw", packs: { behavior: false, resource } }));
+});
+
+test("validateManifest: packs.resource is still required even when behavior is false", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", namespace: "cw", packs: { behavior: false } }), /packs\.resource is required/);
+});
+
+test("validateManifest: a resource-pack-only mod can't depend on a library", () => {
+    const { resource } = validModPacks().packs;
+    assert.throws(() => validateManifest({
+        openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", namespace: "cw",
+        packs: { behavior: false, resource }, dependsOn: { "some-lib": { type: "library" } },
+    }), /resource-pack-only.*can't depend on library "some-lib"/);
+});
+
+test("validateManifest: a resource-pack-only mod CAN still depend on a submodule", () => {
+    const { resource } = validModPacks().packs;
+    assert.doesNotThrow(() => validateManifest({
+        openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", namespace: "cw",
+        packs: { behavior: false, resource }, dependsOn: { asset: { type: "submodule", path: "vendor/asset" } },
+    }));
+});
+
 test("validateManifest: accepts an optional content block on either kind", () => {
     assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", ...validModPacks(), content: { scriptsDir: "PATCHES/scripts", bpOverlayDir: "PATCHES/bp" } }));
     assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "y", version: "1.0.0", entry: "x.js", content: { rpOverlayDir: "rp" } }));

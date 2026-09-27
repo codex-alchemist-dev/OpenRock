@@ -88,6 +88,21 @@ test("buildMod: throws if pointed at a library manifest instead of a mod", () =>
     assert.throws(() => buildMod(path.join(FIXTURES, "build-lib")), /is not a mod manifest/);
 });
 
+// ---- OR-Track G: resource-pack-only mods -----------------------------------
+
+test("buildMod: a resource-pack-only mod (packs.behavior: false) produces bp: null", () => {
+    const { bp, rp } = buildMod(path.join(FIXTURES, "resource-only-mod"));
+    assert.strictEqual(bp, null);
+    assert.ok(rp.has("textures/note.txt"));
+    assert.ok(rp.has("manifest.json"));
+});
+
+test("buildMod: a resource-pack-only mod's RP manifest has no script/data modules", () => {
+    const { rp } = buildMod(path.join(FIXTURES, "resource-only-mod"));
+    const manifest = JSON.parse(rp.get("manifest.json").toString("utf8"));
+    assert.deepStrictEqual(manifest.modules, [{ type: "resources", uuid: "e5555555-5555-5555-5555-555555555555", version: [1, 0, 0] }]);
+});
+
 test("resolveBundledLibraryDirs: finds every real libs/* package by name", () => {
     const dirs = resolveBundledLibraryDirs(path.join(__dirname, ".."));
     assert.strictEqual(dirs["@openrock/registries"], path.join(__dirname, "..", "libs", "registries"));

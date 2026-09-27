@@ -5,9 +5,9 @@ Plain JS/Node modules + a manifest.json (no custom DSL) for libraries and
 mods.
 
 **Status: OR-Phase 0-4, OR-Track A, OR-Track B, OR-Track F (F0 the real
-CLI, F1 multi-mod dev mode), and OR-Track C Tier 1 + Tier 2 Stage 1 (log
-tailer + VS Code debugger launch config) are all done. Nothing wired to a
-real addon yet.** `OpenChara`/`Claude
+CLI, F1 multi-mod dev mode), OR-Track C Tier 1 + Tier 2 Stage 1 (log tailer
++ VS Code debugger launch config), and OR-Track G (resource-pack-only
+mods) are all done. Nothing wired to a real addon yet.** `OpenChara`/`Claude
 Waifus` keep building via `node tools/openchara.js <cmd>` exactly as
 before - this repo has zero effect on that workflow until OR-Track J's
 actual, deliberate cutover.
@@ -277,6 +277,23 @@ In multi-mod mode:
   piecemeal later (verified with a real fixture: `mod-b` declaring
   `breaks: [{name: "mod-a"}]` makes `dev` refuse to start at all,
   end to end through a real CLI invocation).
+
+## Resource-pack-only mods (OR-Track G)
+
+A mod with no scripts/behavior at all - a pure texture/asset pack - sets
+`"packs": { "behavior": false, "resource": {...} }` instead of the full
+`packs.behavior` descriptor object. Every CLI command handles this
+correctly: `build`/`deploy`/`export` produce/write/zip only the resource
+pack (no behavior pack folder is ever created, not an empty one);
+`debug --launch-vscode` refuses outright (there's nothing to attach a
+script debugger to); a `dependsOn` entry of type `"library"` is rejected at
+validation time (a resource-only mod has no script context to call a
+library's API from) - a `"submodule"`-type dependency is still fine, for
+sharing raw assets between packs.
+
+`buildMod()` returns `bp: null` (not an empty `Map`) for a resource-only
+mod, so callers can tell "genuinely no behavior pack" apart from "an empty
+one" at a glance.
 
 ## Debugger (OR-Track C)
 

@@ -63,11 +63,14 @@ function buildOpts(modDir) {
     return { vendorDir: path.join(modDir, "vendor"), libraryDirs: resolveBundledLibraryDirs(OPENROCK_ROOT) };
 }
 
+// OR-Track G: a resource-pack-only mod (packs.behavior === false) has
+// r.bp === null - every command below only touches the behavior pack half
+// when it's genuinely there.
 function cmdBuild(modDir) {
     const t0 = Date.now();
     const r = buildMod(modDir, buildOpts(modDir));
     const out = path.join(modDir, "build");
-    const a = writeTree(r.bp, path.join(out, r.manifest.packs.behavior.folder));
+    const a = r.bp ? writeTree(r.bp, path.join(out, r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
     const b = writeTree(r.rp, path.join(out, r.manifest.packs.resource.folder));
     console.log(`[${stamp()}] Built ${r.manifest.name} in ${Date.now() - t0}ms -> ${out} (${a.written + b.written} written, ${a.removed + b.removed} removed)`);
     return r;
@@ -76,14 +79,15 @@ function cmdBuild(modDir) {
 function cmdCheck(modDir) {
     const t0 = Date.now();
     const r = buildMod(modDir, buildOpts(modDir));
-    console.log(`OK - ${r.manifest.name}: ${r.bp.size} BP + ${r.rp.size} RP files, all checks passed (${Date.now() - t0}ms).`);
+    const bpNote = r.bp ? `${r.bp.size} BP + ` : "(resource-pack-only) ";
+    console.log(`OK - ${r.manifest.name}: ${bpNote}${r.rp.size} RP files, all checks passed (${Date.now() - t0}ms).`);
     return r;
 }
 
 function cmdDeploy(modDir, quiet = false) {
     const r = buildMod(modDir, buildOpts(modDir));
     const root = comMojang();
-    const a = writeTree(r.bp, path.join(root, "development_behavior_packs", r.manifest.packs.behavior.folder));
+    const a = r.bp ? writeTree(r.bp, path.join(root, "development_behavior_packs", r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
     const b = writeTree(r.rp, path.join(root, "development_resource_packs", r.manifest.packs.resource.folder));
     const changed = a.written + b.written + a.removed + b.removed;
     if (!quiet || changed) console.log(`[${stamp()}] Deployed ${r.manifest.name}: ${a.written + b.written} file(s) updated, ${a.removed + b.removed} removed.`);
@@ -93,7 +97,8 @@ function cmdDeploy(modDir, quiet = false) {
 function cmdExport(modDir) {
     const r = buildMod(modDir, buildOpts(modDir));
     const entries = [];
-    for (const [folder, map] of [[r.manifest.packs.behavior.folder, r.bp], [r.manifest.packs.resource.folder, r.rp]]) {
+    const packs = r.bp ? [[r.manifest.packs.behavior.folder, r.bp], [r.manifest.packs.resource.folder, r.rp]] : [[r.manifest.packs.resource.folder, r.rp]];
+    for (const [folder, map] of packs) {
         for (const [rel, data] of map) entries.push({ name: `${folder}/${rel}`, data });
     }
     const dist = path.join(modDir, "dist");
@@ -191,7 +196,7 @@ function cmdLog(modDir, flags) {
     let manifest = null;
     try { manifest = loadManifestFile(modDir).manifest; } catch { /* show everything */ }
     const needles = manifest && !flags.includes("--all")
-        ? [manifest.packs.behavior.folder, manifest.packs.resource.folder, `${manifest.namespace}:`, "[Scripting]", "[UI]"]
+        ? [...(manifest.packs.behavior !== false ? [manifest.packs.behavior.folder] : []), manifest.packs.resource.folder, `${manifest.namespace}:`, "[Scripting]", "[UI]"]
         : null;
     const customFilter = parseLogFilter(flags);
     const clean = l => l.replace(/%APPDATA%\/Minecraft Bedrock\/Users\/Shared\/games\/com\.mojang\/development_(behavior|resource)_packs\//g, "");
@@ -244,6 +249,7 @@ function cmdDebug(modDir, flags) {
         return;
     }
     const { manifest } = loadManifestFile(modDir);
+    if (manifest.packs.behavior === false) throw new Error(`"${manifest.name}" is a resource-pack-only mod (packs.behavior: false) - there are no scripts to debug`);
     const modeFlag = flags.find(f => f.startsWith("--mode="));
     const mode = modeFlag ? modeFlag.slice("--mode=".length) : "listen";
     if (mode !== "connect" && mode !== "listen") throw new Error(`--mode must be "connect" or "listen", got "${mode}"`);

@@ -1,0 +1,16 @@
+{
+  "openrockVersion": 1,
+  "kind": "mod",
+  "name": "resource-only-mod",
+  "version": "1.0.0",
+  "namespace": "rom",
+  "packs": {
+    "behavior": false,
+    "resource": {
+      "folder": "Resource Only R",
+      "uuid": "e4444444-4444-4444-4444-444444444444",
+      "moduleUuid": "e5555555-5555-5555-5555-555555555555"
+    }
+  },
+  "content": { "rpOverlayDir": "rp" }
+}

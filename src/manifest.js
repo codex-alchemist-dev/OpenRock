@@ -93,6 +93,16 @@ function validateManifest(manifest) {
         if (manifest.provides) throw new Error(`mod manifest "${manifest.name}" must not declare "provides" - mods are leaf packages`);
         if (typeof manifest.namespace !== "string" || !/^[a-z][a-z0-9_]*$/.test(manifest.namespace)) throw new Error(`mod manifest "${manifest.name}": "namespace" must be lowercase letters/digits/underscores`);
         validatePacks(manifest);
+        // OR-Track G: a resource-pack-only mod (packs.behavior === false) has
+        // no scripts at all, so depending on a "library" dependency (whose
+        // whole point is handing back an API to CALL from script) makes no
+        // sense - reject it outright rather than silently loading a library
+        // nothing will ever use.
+        if (manifest.packs.behavior === false) {
+            for (const [depName, dep] of Object.entries(manifest.dependsOn ?? {})) {
+                if (dep.type === "library") throw new Error(`mod manifest "${manifest.name}": resource-pack-only (packs.behavior: false) mods can't depend on library "${depName}" - there's no script context to use its API in`);
+            }
+        }
     }
 
     // content (OR-Track F0): where a package's own build-time inputs live,
@@ -112,15 +122,21 @@ function validateManifest(manifest) {
 
 // A mod (and OR-Track K's hybrid libraries, later) needs real pack UUIDs to
 // build into a deployable BP/RP pair - a pure script library never does.
+// packs.behavior may be the literal `false` (OR-Track G: a resource-pack-
+// only mod, no behavior pack at all) instead of the full descriptor object
+// - packs.resource is always required regardless, since a mod needs at
+// least one real pack to be a valid add-on.
 function validatePacks(manifest) {
     const p = manifest.packs;
     if (!p || typeof p !== "object") throw new Error(`mod manifest "${manifest.name}" requires "packs"`);
     const need = (cond, msg) => { if (!cond) throw new Error(`mod manifest "${manifest.name}": ${msg}`); };
-    need(p.behavior && typeof p.behavior === "object", `packs.behavior is required`);
-    need(typeof p.behavior.folder === "string" && p.behavior.folder, `packs.behavior.folder is required`);
-    need(typeof p.behavior.uuid === "string" && p.behavior.uuid, `packs.behavior.uuid is required`);
-    need(typeof p.behavior.dataModuleUuid === "string" && p.behavior.dataModuleUuid, `packs.behavior.dataModuleUuid is required`);
-    need(typeof p.behavior.scriptModuleUuid === "string" && p.behavior.scriptModuleUuid, `packs.behavior.scriptModuleUuid is required`);
+    if (p.behavior !== false) {
+        need(p.behavior && typeof p.behavior === "object", `packs.behavior is required (or explicitly false for a resource-pack-only mod, OR-Track G)`);
+        need(typeof p.behavior.folder === "string" && p.behavior.folder, `packs.behavior.folder is required`);
+        need(typeof p.behavior.uuid === "string" && p.behavior.uuid, `packs.behavior.uuid is required`);
+        need(typeof p.behavior.dataModuleUuid === "string" && p.behavior.dataModuleUuid, `packs.behavior.dataModuleUuid is required`);
+        need(typeof p.behavior.scriptModuleUuid === "string" && p.behavior.scriptModuleUuid, `packs.behavior.scriptModuleUuid is required`);
+    }
     need(p.resource && typeof p.resource === "object", `packs.resource is required`);
     need(typeof p.resource.folder === "string" && p.resource.folder, `packs.resource.folder is required`);
     need(typeof p.resource.uuid === "string" && p.resource.uuid, `packs.resource.uuid is required`);
