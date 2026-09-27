@@ -1,0 +1,6 @@
+[submodule "vendor/minui"]
+	path = vendor/minui
+	url = ../MinUI
+[submodule "vendor/mclite"]
+	path = vendor/mclite
+	url = ../MClite

@@ -3,10 +3,19 @@
 A plugin system for Minecraft Bedrock addon development. Node-based, plain
 JS/Node modules + a manifest.json (no custom DSL) for plugins and mods.
 
-**Status: OR-Phase 1 (scaffold only).** Nothing in this repo is wired up
-yet. `OpenChara`/`Claude Waifus` keep building via
-`node tools/openchara.js <cmd>` exactly as before - this repo has zero
-effect on that workflow until OR-Phase 6.
+**Status: OR-Phase 2 (submodules wired, still unused).** `vendor/minui` and
+`vendor/mclite` are real git submodules, pinned to a commit. Nothing in
+this repo is wired up to anything real yet - `OpenChara`/`Claude Waifus`
+keep building via `node tools/openchara.js <cmd>` exactly as before, this
+repo has zero effect on that workflow until OR-Phase 6.
+
+**Submodule URLs are local paths for now** (`.gitmodules` points at
+`../MinUI`/`../MClite`, relative sibling checkouts on this machine) -
+proves the submodule mechanics work without needing to push either repo's
+local commits to GitHub first. Before this becomes real for any other
+machine/collaborator, repoint `.gitmodules` at the real GitHub URLs
+(`github.com/Cookiesmuch/MinUI`, and MClite's once it exists there) once
+those repos' current commits are actually pushed.
 
 The full phased design (manifest shape, plugin lifecycle, MClite's
 generalized API, submodule wiring, and the migration order with testing
@@ -41,7 +50,7 @@ touching any phase past this one.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MClite - added in OR-Phase 2).
 
-## Submodule workflow (once OR-Phase 2 adds them)
+## Submodule workflow
 
 MinUI and MClite are developed against their own standalone checkouts as
 today - `git submodule` doesn't change that. After committing a change in
