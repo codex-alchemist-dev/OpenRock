@@ -58,8 +58,8 @@ before touching any phase past this one.
   real `loadLibraries()` call to prove (not just the unit's own isolated
   logic), and dummy fixture libraries `kernel.test.js` loads.
 - `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B:
-  `@openrock/registries`, `@openrock/capabilities`, `@openrock/compat` so
-  far, more to follow) plus local library dev
+  `@openrock/registries`, `@openrock/capabilities`, `@openrock/compat`,
+  `@openrock/config` so far, more to follow) plus local library dev
   checkouts for anything else.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MCLite), pinned to
@@ -146,8 +146,18 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   to every "library"-type dependency's `apiVersion` field (see "Manifest
   v2" above) - this library is for anything that wants the same resolution
   manually (a debugging tool, the future CLI's `openrock info`).
+- **`@openrock/config`** (`libs/config/`) - per-mod configuration, two ways.
+  `bakeConfig(modName, overrides)` is the build-time-baked path: merges
+  declared defaults with an overrides object (whatever a future build step
+  reads from `mod.config.json`) and validates the result, throwing on
+  anything invalid rather than silently falling back - a real CLI wiring
+  this in at build time is OR-Track F0's job, not a redesign of this
+  module. `readRuntimeConfig`/`writeRuntimeConfig` are the runtime-mutable
+  path, built directly on `@openrock/capabilities` - real and testable
+  today even though the in-game screen for editing it (Track D, or
+  OR-Track K's add-ons menu) doesn't exist yet.
 - More to follow: `@openrock/events`, `@openrock/networking`,
-  `@openrock/config`, `@openrock/datagen`.
+  `@openrock/datagen`.
 
 ## Submodule workflow
 
