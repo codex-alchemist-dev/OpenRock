@@ -59,7 +59,8 @@ before touching any phase past this one.
   logic), and dummy fixture libraries `kernel.test.js` loads.
 - `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B:
   `@openrock/registries`, `@openrock/capabilities`, `@openrock/compat`,
-  `@openrock/config` so far, more to follow) plus local library dev
+  `@openrock/config`, `@openrock/events` so far, more to follow) plus local
+  library dev
   checkouts for anything else.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MCLite), pinned to
@@ -156,8 +157,19 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   path, built directly on `@openrock/capabilities` - real and testable
   today even though the in-game screen for editing it (Track D, or
   OR-Track K's add-ons menu) doesn't exist yet.
-- More to follow: `@openrock/events`, `@openrock/networking`,
-  `@openrock/datagen`.
+- **`@openrock/events`** (`libs/events/`) - a pub/sub layer over Bedrock's
+  own `world.beforeEvents`/`afterEvents`. OpenRock makes the ONE real
+  `.subscribe()` call per native event (`bindNativeEvent()`, idempotent -
+  safe even if two libraries both wire up the same native event); every
+  mod/library instead calls `on(eventName, handlerName, fn)` and gets
+  fanned out to by `dispatch()`, each handler wrapped in its own try/catch
+  so one throwing handler never breaks another's. Handler order is
+  registration order, which - since every library's `register()` already
+  runs in `libLoader.js`'s topologically-sorted dependency order - is
+  dependency-graph order for free. Never imports `@minecraft/server`
+  (`bindNativeEvent`'s `subscribeFn` is supplied by the real bootstrap
+  code), so it's fully unit-testable.
+- More to follow: `@openrock/networking`, `@openrock/datagen`.
 
 ## Submodule workflow
 
