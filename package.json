@@ -8,7 +8,7 @@
     "openrock": "bin/openrock.js"
   },
   "scripts": {
-    "test": "node test/kernel.test.js && node test/semver.test.js && node test/resolver.test.js && node test/compat.test.js && node test/compat-integration.test.js && node test/registries-integration.test.js && node test/capabilities-integration.test.js && node test/config-integration.test.js && node test/events-integration.test.js && node libs/registries/test/registries.test.js && node libs/capabilities/test/capabilities.test.js && node libs/compat/test/compat.test.js && node libs/config/test/config.test.js && node libs/events/test/events.test.js"
+    "test": "node test/kernel.test.js && node test/semver.test.js && node test/resolver.test.js && node test/compat.test.js && node test/compat-integration.test.js && node test/registries-integration.test.js && node test/capabilities-integration.test.js && node test/config-integration.test.js && node test/events-integration.test.js && node test/networking-integration.test.js && node libs/registries/test/registries.test.js && node libs/capabilities/test/capabilities.test.js && node libs/compat/test/compat.test.js && node libs/config/test/config.test.js && node libs/events/test/events.test.js && node libs/networking/test/networking.test.js"
   },
   "engines": {
     "node": ">=18"

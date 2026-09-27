@@ -59,8 +59,8 @@ before touching any phase past this one.
   logic), and dummy fixture libraries `kernel.test.js` loads.
 - `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B:
   `@openrock/registries`, `@openrock/capabilities`, `@openrock/compat`,
-  `@openrock/config`, `@openrock/events` so far, more to follow) plus local
-  library dev
+  `@openrock/config`, `@openrock/events`, `@openrock/networking` so far,
+  more to follow) plus local library dev
   checkouts for anything else.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MCLite), pinned to
@@ -169,7 +169,25 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   dependency-graph order for free. Never imports `@minecraft/server`
   (`bindNativeEvent`'s `subscribeFn` is supplied by the real bootstrap
   code), so it's fully unit-testable.
-- More to follow: `@openrock/networking`, `@openrock/datagen`.
+- **`@openrock/networking`** (`libs/networking/`) - an addressable
+  `namespace:channel` request/response API over Bedrock's own
+  `/scriptevent` mechanism, with a chunked-JSON-payload convention (a real
+  scriptevent message has a length ceiling that's varied across Bedrock
+  versions, so any payload is transparently split into fixed-size chunks
+  and reassembled before a handler ever sees it). `send()` is
+  fire-and-forget; `request()` returns a Promise resolving with the
+  responder's return value (or rejecting on timeout);
+  `registerHandler(channel, fn)` answers both. **Real bug caught while
+  writing its tests, worth knowing about**: since a real scriptevent
+  broadcasts to every subscriber *including the sender*, a requester would
+  otherwise "answer its own request" (with whatever its own handler for
+  that channel returns, or `undefined`) and race that bogus self-answer
+  against the real responder's reply - guarded against explicitly (a
+  `pending.has(reqId)` check skips a self-broadcast "request" envelope),
+  with a regression test locking it in. Never imports `@minecraft/server`
+  (`bindTransport({send, subscribe})` is supplied by the real bootstrap
+  code).
+- More to follow: `@openrock/datagen`.
 
 ## Submodule workflow
 
