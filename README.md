@@ -10,8 +10,9 @@ Fireball Everything. See [AUTHORS.md](AUTHORS.md) and
 
 **Status: OR-Phase 0-4, OR-Track A, OR-Track B, OR-Track F (F0 the real
 CLI, F1 multi-mod dev mode), OR-Track C Tier 1 + Tier 2 Stage 1 (log tailer
-+ VS Code debugger launch config), and OR-Track G (resource-pack-only
-mods) are all done. Nothing wired to a real addon yet.** `OpenChara`/`Claude
++ VS Code debugger launch config), OR-Track G (resource-pack-only mods),
+and OR-Track K (hybrid libraries + a real, buildable runtime addon) are
+all done.** `OpenChara`/`Claude
 Waifus` keep building via `node tools/openchara.js <cmd>` exactly as
 before - this repo has zero effect on that workflow until OR-Track J's
 actual, deliberate cutover.
@@ -323,6 +324,40 @@ mods depend on for its API, but that a server owner installs ONCE as its
 own pack, not duplicated into every consuming mod's build - the same
 relationship a real Fabric/Forge "library mod" has to the mods depending
 on it.
+
+### `@openrock/runtime-addon` (OR-Track K, the real deliverable)
+
+`libs/runtime-addon/` - a real, buildable hybrid library (`openrock check
+libs/runtime-addon` / `openrock build libs/runtime-addon` both work end to
+end today): an in-world add-ons config menu, gated behind server-OP or a
+configured password, plus a real, verified 16x16 placeholder icon
+(generated with MinUI's own `lib/png.js`, round-tripped through its
+decoder to confirm it's a genuinely valid PNG) merged into the shared
+`item_texture.json` registry via the existing `MERGED_FILES` mechanism.
+
+**A real scope narrowing, found while building this, worth stating
+plainly**: the original design called for the config menu to be a MinUI v2
+screen. Building that surfaced that MinUI's real runtime (`runtime.js` etc.)
+isn't a generic drop-in OpenRock dependency yet - it imports a
+project-generated `screens.generated.js` and a project-supplied `ids.js`
+that only exist after a project's own UI compilation step runs, which
+OpenRock's generic build pipeline doesn't produce. Rather than fake that
+integration, this addon ships with its own plain `ActionFormData`/
+`ModalFormData` menu (real, correct, self-contained) and documents the
+MinUI-screen upgrade as real future work once that bridge exists.
+Likewise, the entry point is a `/scriptevent openrock:addons` (the same
+well-established mechanism this whole project's test harnesses already
+use) rather than an injected vanilla pause-menu button - editing vanilla's
+own `pause_screen.json` correctly needs its own verification spike, not a
+confident guess.
+
+The addon's pure logic (password hashing, config value resolution/
+coercion) is split into `scripts/pure/*.js` - zero `@minecraft/server`
+import, so it's directly unit-tested (`libs/runtime-addon/test/pure.test.js`,
+loaded via dynamic `import()` since these are real ES modules) even though
+the Bedrock-facing files around it (`auth.js`/`config.js`/`menu.js`/
+`main.js`) genuinely need a running Minecraft instance to verify - the
+same split this whole ecosystem already uses everywhere else.
 
 ## Debugger (OR-Track C)
 

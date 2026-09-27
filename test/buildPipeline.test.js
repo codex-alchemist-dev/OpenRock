@@ -64,6 +64,14 @@ test("buildMod: main.js imports the library's scripts BEFORE the mod's own (depe
     assert.ok(libIndex >= 0 && modIndex >= 0 && libIndex < modIndex);
 });
 
+test("buildMod: content.scriptEntry narrows the top-level import to just that file, other scripts still copied", () => {
+    const { bp } = buildMod(path.join(FIXTURES, "script-entry-lib"));
+    const main = bp.get("scripts/main.js").toString("utf8");
+    assert.match(main, /import "\.\/script-entry-mod\/main\.js";/);
+    assert.doesNotMatch(main, /helper\.js/, "helper.js is an implementation detail reached via main.js's own import, never double-imported at the top level");
+    assert.ok(bp.has("scripts/script-entry-mod/helper.js"), "helper.js must still be COPIED into the build, just not top-level-imported");
+});
+
 test("buildMod: generates a real BP manifest.json from packs/version", () => {
     const { bp } = build();
     const manifest = JSON.parse(bp.get("manifest.json").toString("utf8"));

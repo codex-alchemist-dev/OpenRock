@@ -1,0 +1,23 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "@openrock/runtime-addon",
+  "version": "1.0.0",
+  "entry": "src/register.js",
+  "namespace": "openrock",
+  "packs": {
+    "behavior": {
+      "folder": "OpenRock Runtime B",
+      "uuid": "3dbd72ac-78c6-4b0b-ba61-2b4bc19f0da7",
+      "dataModuleUuid": "9c414e7d-b879-4df9-bd54-189cfc38bf6a",
+      "scriptModuleUuid": "cd8b6823-3f0f-4b00-935b-e3da931d4391"
+    },
+    "resource": {
+      "folder": "OpenRock Runtime R",
+      "uuid": "0d3adc58-d3df-43fc-8993-eb5f1013323f",
+      "moduleUuid": "2427554e-17cb-411b-9383-7591e9681a1b"
+    }
+  },
+  "content": { "scriptsDir": "scripts", "scriptEntry": "main.js", "rpOverlayDir": "rp" },
+  "provides": { "api": "src/register.js", "hookNamespaces": ["runtime-addon"] }
+}

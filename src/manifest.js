@@ -126,9 +126,19 @@ function validateManifest(manifest) {
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
-        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir"]) {
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
+        // scriptEntry (OR-Track K): narrows which file(s) under scriptsDir
+        // the generated main.js actually imports - without it, EVERY .js
+        // file found gets its own top-level import (OR-Phase 0's original
+        // "every content script is imported once" convention, still the
+        // default). A package with real internal module structure (an
+        // entry file that itself imports its own implementation-detail
+        // files) declares scriptEntry so only the entry gets a top-level
+        // import; the rest are still copied, just reached only via the
+        // entry's own relative imports, never double-imported.
+        if (c.scriptEntry !== undefined && !c.scriptsDir) throw new Error(`manifest.content.scriptEntry requires "scriptsDir" to be set too`);
     }
 }
 

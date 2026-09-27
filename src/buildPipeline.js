@@ -216,7 +216,11 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
             const files = [];
             for (const rel of walk(abs)) {
                 put(bp, `scripts/${folder}/${rel}`, fs.readFileSync(path.join(abs, rel)));
-                if (rel.endsWith(".js")) files.push(`./${folder}/${rel}`);
+                // scriptEntry (OR-Track K), when declared, narrows the
+                // top-level import list to just that one file - every other
+                // .js file is still copied, only reachable via the entry's
+                // OWN relative imports, never separately double-imported.
+                if (rel.endsWith(".js") && (!content.scriptEntry || rel === content.scriptEntry)) files.push(`./${folder}/${rel}`);
             }
             if (files.length) scriptEntries.push({ packageName: manifest.name, files });
         }

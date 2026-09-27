@@ -218,6 +218,14 @@ test("validateManifest: rejects a non-string content field", () => {
     assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", content: { scriptsDir: 5 } }), /content\.scriptsDir must be a string path/);
 });
 
+test("validateManifest: accepts content.scriptEntry alongside scriptsDir", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", content: { scriptsDir: "scripts", scriptEntry: "main.js" } }));
+});
+
+test("validateManifest: rejects content.scriptEntry without scriptsDir", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", content: { scriptEntry: "main.js" } }), /scriptEntry requires "scriptsDir"/);
+});
+
 // ---- validateManifest: OR-Track K (hybrid libraries with their own packs) ----
 
 test("validateManifest: a library with no packs field needs no namespace/packs at all (an ordinary script library)", () => {
