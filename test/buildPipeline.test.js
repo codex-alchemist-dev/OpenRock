@@ -84,8 +84,21 @@ test("buildMod: throws a clear error for a missing submodule dependency director
     assert.throws(() => buildMod(MOD_DIR, { vendorDir: path.join(FIXTURES, "nonexistent") }), /No openrock\.mod\.json or openrock\.library\.json found/);
 });
 
-test("buildMod: throws if pointed at a library manifest instead of a mod", () => {
-    assert.throws(() => buildMod(path.join(FIXTURES, "build-lib")), /is not a mod manifest/);
+test("buildMod: throws if pointed at an ordinary (non-hybrid) library with no packs of its own", () => {
+    assert.throws(() => buildMod(path.join(FIXTURES, "build-lib")), /has no buildable pack/);
+});
+
+// ---- OR-Track K: hybrid libraries (their own packs, still kind:"library") ----
+
+test("buildMod: a hybrid library (kind:\"library\" with its own packs) builds as its own real pack", () => {
+    const { bp, rp, manifest } = buildMod(path.join(FIXTURES, "hybrid-library"));
+    assert.strictEqual(manifest.kind, "library");
+    assert.ok(bp.has("manifest.json"));
+    assert.ok(bp.has("scripts/main.js"));
+    assert.ok(bp.has(`scripts/${"hybrid-library"}/runtime.js`));
+    assert.ok(rp.has("textures/note.txt"));
+    const bpManifest = JSON.parse(bp.get("manifest.json").toString("utf8"));
+    assert.strictEqual(bpManifest.header.uuid, "f1111111-1111-1111-1111-111111111111");
 });
 
 // ---- OR-Track G: resource-pack-only mods -----------------------------------

@@ -218,6 +218,28 @@ test("validateManifest: rejects a non-string content field", () => {
     assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", content: { scriptsDir: 5 } }), /content\.scriptsDir must be a string path/);
 });
 
+// ---- validateManifest: OR-Track K (hybrid libraries with their own packs) ----
+
+test("validateManifest: a library with no packs field needs no namespace/packs at all (an ordinary script library)", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/registries", version: "1.0.0", entry: "src/register.js" }));
+});
+
+test("validateManifest: a hybrid library declaring packs is validated the same way a mod's packs are", () => {
+    const { packs } = validModPacks();
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/runtime-addon", version: "1.0.0", entry: "src/register.js", namespace: "openrock", packs }));
+});
+
+test("validateManifest: a hybrid library's packs still requires namespace", () => {
+    const { packs } = validModPacks();
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/runtime-addon", version: "1.0.0", entry: "src/register.js", packs }), /"namespace" is required when "packs" is present/);
+});
+
+test("validateManifest: a hybrid library's incomplete packs is rejected with a \"library manifest\" error, not a \"mod manifest\" one", () => {
+    const p = validModPacks();
+    delete p.packs.resource.moduleUuid;
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/runtime-addon", version: "1.0.0", entry: "src/register.js", namespace: "openrock", ...p }), /^Error: library manifest "@openrock\/runtime-addon": packs\.resource\.moduleUuid is required$/);
+});
+
 // ---- resolveDependency -----------------------------------------------
 
 test("resolveDependency: resolves a submodule dependency to a vendorDir path", () => {

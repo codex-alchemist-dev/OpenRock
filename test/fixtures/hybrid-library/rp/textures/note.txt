@@ -1,0 +1,1 @@
+a shared texture asset the hybrid library's own pack contributes

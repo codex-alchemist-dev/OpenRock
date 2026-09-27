@@ -32,6 +32,14 @@ test("discoverMods: finds every valid mod subdirectory, skips non-mod ones silen
     assert.deepStrictEqual(names, ["mod-a", "mod-b"]);
 });
 
+test("discoverMods: a hybrid library (kind:\"library\" with its own packs) counts as discoverable too (OR-Track K)", () => {
+    const found = discoverMods(path.join(__dirname, "fixtures"));
+    const names = found.map(f => f.manifest.name).sort();
+    assert.deepStrictEqual(names, ["build-mod", "hybrid-library", "resource-only-mod"]);
+    // build-lib (an ordinary, non-hybrid library) and mods-dir (a folder of
+    // manifests, not a manifest itself) are correctly excluded.
+});
+
 test("discoverMods: an empty/nonexistent mods dir returns an empty array, not a throw", () => {
     assert.deepStrictEqual(discoverMods(path.join(MODS_DIR, "does-not-exist")), []);
 });

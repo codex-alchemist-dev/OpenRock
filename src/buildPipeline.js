@@ -42,6 +42,11 @@ const semver = require("./semver.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
+/** True for a mod, or a hybrid library that declares its own "packs" (OR-Track K). */
+function isBuildablePackage(manifest) {
+    return manifest.kind === "mod" || (manifest.kind === "library" && Boolean(manifest.packs));
+}
+
 function fill(text, vars) {
     return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
 }
@@ -152,18 +157,27 @@ function buildManifests(m) {
 }
 
 /**
- * @param {string} modDir - a directory containing openrock.mod.json.
+ * Builds a mod, OR a hybrid library that declares its own `packs`
+ * (OR-Track K: a shared runtime addon other packages depend on via
+ * type:"library" for its register()-time API, but that's ALSO its own
+ * independently-installable BP/RP pair - not duplicated into every
+ * consuming mod's build). The function name stays `buildMod` for
+ * continuity with existing callers; "is this buildable at all" is
+ * `manifest.kind === "mod" || (kind === "library" && manifest.packs)`.
+ *
+ * @param {string} modDir - a directory containing openrock.mod.json or a
+ *   openrock.library.json with its own "packs".
  * @param {object} [opts]
  * @param {string} [opts.vendorDir] - base directory "submodule"-type deps resolve against.
  * @param {Record<string,string>} [opts.libraryDirs] - name -> directory, for "library"-type deps.
  * @returns {{ bp: Map<string,Buffer>|null, rp: Map<string,Buffer>, manifest: object }}
- *   `bp` is `null` for a resource-pack-only mod (OR-Track G,
+ *   `bp` is `null` for a resource-pack-only package (OR-Track G,
  *   `manifest.packs.behavior === false`) - there is genuinely no behavior
  *   pack to write/deploy/export, not an empty one.
  */
 function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
     const { manifest: modManifest, dir } = loadManifestFile(modDir);
-    if (modManifest.kind !== "mod") throw new Error(`buildMod(): "${modDir}" is not a mod manifest (kind: "${modManifest.kind}")`);
+    if (!isBuildablePackage(modManifest)) throw new Error(`buildMod(): "${modDir}" has no buildable pack (kind "${modManifest.kind}" with no "packs" declared)`);
     const hasBehaviorPack = modManifest.packs.behavior !== false;
 
     const ordered = topoSort(collectEntries(modManifest, dir, { vendorDir, libraryDirs }));
@@ -235,10 +249,14 @@ function discoverMods(modsDir) {
         const dir = path.join(modsDir, entry.name);
         try {
             const loaded = loadManifestFile(dir);
-            if (loaded.manifest.kind === "mod") out.push(loaded);
+            // A hybrid library with its own "packs" (OR-Track K) is just as
+            // buildable/deployable as a mod - discovered here too, so a
+            // shared runtime addon sitting in the same mods/ folder gets
+            // its own independent dev-mode watch loop like any other package.
+            if (isBuildablePackage(loaded.manifest)) out.push(loaded);
         } catch { /* not a valid package dir here - skip */ }
     }
     return out;
 }
 
-module.exports = { buildMod, collectEntries, resolveBundledLibraryDirs, discoverMods, writeTree };
+module.exports = { buildMod, collectEntries, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree };

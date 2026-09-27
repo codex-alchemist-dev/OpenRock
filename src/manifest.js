@@ -88,6 +88,18 @@ function validateManifest(manifest) {
         // manifests being loaded together is known - see libLoader.js's
         // topoSort(), which throws "Unknown library dependency" for
         // exactly this case.
+        // OR-Track K: a HYBRID library optionally declares its own "packs"
+        // - it's still a normal kind:"library" for the dependency graph
+        // (other packages depend on it via type:"library" for its
+        // register()-time API), but it ALSO builds into its own real,
+        // independently-installable BP/RP pair (buildPipeline.js's
+        // buildMod() accepts this case too) - the deliberate example is
+        // OR-Track K's own runtime addon: a shared pack every consuming
+        // mod's world needs once, not duplicated into each mod's own build.
+        if (manifest.packs !== undefined) {
+            if (typeof manifest.namespace !== "string" || !/^[a-z][a-z0-9_]*$/.test(manifest.namespace)) throw new Error(`library manifest "${manifest.name}": "namespace" is required when "packs" is present, and must be lowercase letters/digits/underscores`);
+            validatePacks(manifest);
+        }
     }
     if (manifest.kind === "mod") {
         if (manifest.provides) throw new Error(`mod manifest "${manifest.name}" must not declare "provides" - mods are leaf packages`);
@@ -128,8 +140,8 @@ function validateManifest(manifest) {
 // least one real pack to be a valid add-on.
 function validatePacks(manifest) {
     const p = manifest.packs;
-    if (!p || typeof p !== "object") throw new Error(`mod manifest "${manifest.name}" requires "packs"`);
-    const need = (cond, msg) => { if (!cond) throw new Error(`mod manifest "${manifest.name}": ${msg}`); };
+    const need = (cond, msg) => { if (!cond) throw new Error(`${manifest.kind} manifest "${manifest.name}": ${msg}`); };
+    need(p && typeof p === "object", `requires "packs"`);
     if (p.behavior !== false) {
         need(p.behavior && typeof p.behavior === "object", `packs.behavior is required (or explicitly false for a resource-pack-only mod, OR-Track G)`);
         need(typeof p.behavior.folder === "string" && p.behavior.folder, `packs.behavior.folder is required`);

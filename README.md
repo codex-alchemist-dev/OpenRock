@@ -307,6 +307,23 @@ sharing raw assets between packs.
 mod, so callers can tell "genuinely no behavior pack" apart from "an empty
 one" at a glance.
 
+## Hybrid libraries (OR-Track K, infrastructure)
+
+A library can now optionally declare its own `packs` (the same shape a
+mod's `packs` field has, including `packs.behavior: false` for a
+resource-pack-only one) - `manifest.kind` stays `"library"` for the
+dependency graph (other packages still `dependsOn` it via `type:
+"library"` for its `register()`-time API), but it's ALSO independently
+buildable/deployable as its own real BP/RP pair via `buildMod()`,
+`discoverMods()` (multi-mod dev mode), and every CLI command -
+`isBuildablePackage(manifest)` is the one shared check all three use.
+
+This exists for OR-Track K's own runtime addon: a shared library other
+mods depend on for its API, but that a server owner installs ONCE as its
+own pack, not duplicated into every consuming mod's build - the same
+relationship a real Fabric/Forge "library mod" has to the mods depending
+on it.
+
 ## Debugger (OR-Track C)
 
 - **Tier 1, `openrock log <modDir> [--all] [--follow] [--filter=<regex>]`**:

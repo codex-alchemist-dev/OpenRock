@@ -122,6 +122,34 @@ test("openrock deploy: writes into OPENROCK_COM_MOJANG's development pack folder
     assert.ok(fs.existsSync(path.join(fakeComMojang, "development_resource_packs", "CLI Test R", "manifest.json")));
 });
 
+test("openrock build (hybrid library, OR-Track K): builds as its own real pack via the CLI", () => {
+    const modDir = path.join(__dirname, "fixtures", "hybrid-library");
+    const buildOut = path.join(modDir, "build");
+    if (fs.existsSync(buildOut)) fs.rmSync(buildOut, { recursive: true, force: true });
+    try {
+        const output = run(["build", modDir]);
+        assert.match(output, /Built hybrid-library/);
+        assert.ok(fs.existsSync(path.join(buildOut, "Hybrid Library B", "manifest.json")));
+        assert.ok(fs.existsSync(path.join(buildOut, "Hybrid Library R", "textures", "note.txt")));
+    } finally {
+        fs.rmSync(buildOut, { recursive: true, force: true });
+    }
+});
+
+test("openrock dev (hybrid library alone): detected as a single package, not a mods/ folder", () => {
+    const modDir = path.join(__dirname, "fixtures", "hybrid-library");
+    const fakeComMojang = fs.mkdtempSync(path.join(os.tmpdir(), "openrock-cli-mojang-"));
+    // dev normally runs forever (fs.watch); this only needs to prove the
+    // FIRST synchronous deploy happens correctly for a lone hybrid library
+    // (not "no mods found" from cmdDevMulti), so it's killed immediately.
+    const { spawnSync } = require("child_process");
+    const result = spawnSync(process.execPath, [CLI, "dev", modDir], {
+        encoding: "utf8", timeout: 3000, env: { ...process.env, OPENROCK_COM_MOJANG: fakeComMojang },
+    });
+    assert.doesNotMatch(result.stderr ?? "", /No mods found/);
+    assert.ok(fs.existsSync(path.join(fakeComMojang, "development_behavior_packs", "Hybrid Library B", "manifest.json")));
+});
+
 test("openrock build (resource-pack-only): produces only a resource pack, no behavior pack folder at all", () => {
     const modDir = path.join(__dirname, "fixtures", "resource-only-mod");
     const buildOut = path.join(modDir, "build");

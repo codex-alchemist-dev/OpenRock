@@ -38,7 +38,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { buildMod, resolveBundledLibraryDirs, discoverMods, writeTree } = require("../src/buildPipeline.js");
+const { buildMod, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree } = require("../src/buildPipeline.js");
 const { resolveManifestSet } = require("../src/resolver.js");
 const { zip } = require("../src/zip.js");
 const { loadManifestFile } = require("../src/manifest.js");
@@ -172,9 +172,9 @@ function cmdDevMulti(modsDir) {
 }
 
 function cmdDev(dir) {
-    let isSingleMod = false;
-    try { isSingleMod = loadManifestFile(dir).manifest.kind === "mod"; } catch { /* not a mod dir itself - try treating it as a mods/ folder */ }
-    return isSingleMod ? cmdDevSingle(dir) : cmdDevMulti(dir);
+    let isSinglePackage = false;
+    try { isSinglePackage = isBuildablePackage(loadManifestFile(dir).manifest); } catch { /* not a package dir itself - try treating it as a mods/ folder */ }
+    return isSinglePackage ? cmdDevSingle(dir) : cmdDevMulti(dir);
 }
 
 function logDir() {
