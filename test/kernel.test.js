@@ -234,18 +234,18 @@ test("validateManifest: a library with no packs field needs no namespace/packs a
 
 test("validateManifest: a hybrid library declaring packs is validated the same way a mod's packs are", () => {
     const { packs } = validModPacks();
-    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/runtime-addon", version: "1.0.0", entry: "src/register.js", namespace: "openrock", packs }));
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/hybrid-example", version: "1.0.0", entry: "src/register.js", namespace: "openrock", packs }));
 });
 
 test("validateManifest: a hybrid library's packs still requires namespace", () => {
     const { packs } = validModPacks();
-    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/runtime-addon", version: "1.0.0", entry: "src/register.js", packs }), /"namespace" is required when "packs" is present/);
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/hybrid-example", version: "1.0.0", entry: "src/register.js", packs }), /"namespace" is required when "packs" is present/);
 });
 
 test("validateManifest: a hybrid library's incomplete packs is rejected with a \"library manifest\" error, not a \"mod manifest\" one", () => {
     const p = validModPacks();
     delete p.packs.resource.moduleUuid;
-    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/runtime-addon", version: "1.0.0", entry: "src/register.js", namespace: "openrock", ...p }), /^Error: library manifest "@openrock\/runtime-addon": packs\.resource\.moduleUuid is required$/);
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "@openrock/hybrid-example", version: "1.0.0", entry: "src/register.js", namespace: "openrock", ...p }), /^Error: library manifest "@openrock\/hybrid-example": packs\.resource\.moduleUuid is required$/);
 });
 
 // ---- resolveDependency -----------------------------------------------

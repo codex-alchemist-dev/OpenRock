@@ -1,4 +1,0 @@
-{
-  "type": "module",
-  "_note": "Exists only so Node's ESM resolution treats this directory's .js files as ES modules when test/pure.test.js dynamically imports them directly. Harmless if bundled into the shipped pack (Minecraft ignores files its manifest/imports never reference) - kept here rather than one level up specifically so it doesn't also affect test/pure.test.js itself, which needs to stay CommonJS (require())."
-}
