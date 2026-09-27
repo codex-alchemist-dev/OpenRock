@@ -4,6 +4,10 @@ An open-source library system for Minecraft Bedrock addon development.
 Plain JS/Node modules + a manifest.json (no custom DSL) for libraries and
 mods.
 
+A [Codex Alchemist](https://github.com/codex-alchemist-dev) project, under
+Fireball Everything. See [AUTHORS.md](AUTHORS.md) and
+[CREDITS.md](CREDITS.md).
+
 **Status: OR-Phase 0-4, OR-Track A, OR-Track B, OR-Track F (F0 the real
 CLI, F1 multi-mod dev mode), OR-Track C Tier 1 + Tier 2 Stage 1 (log tailer
 + VS Code debugger launch config), and OR-Track G (resource-pack-only
