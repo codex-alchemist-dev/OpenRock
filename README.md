@@ -4,12 +4,18 @@ An open-source library system for Minecraft Bedrock addon development.
 Plain JS/Node modules + a manifest.json (no custom DSL) for libraries and
 mods.
 
-**Status: OR-Phase 0-4 done. OR-Track A (manifest & dependency model v2)
-and OR-Track B (all seven API-surface libraries) done. Nothing wired to a
-real addon yet.** `OpenChara`/`Claude Waifus` keep
-building via `node tools/openchara.js <cmd>` exactly as before - this repo
-has zero effect on that workflow until OR-Track F0 (the real CLI) and
-OR-Track J (the actual cutover).
+**Status: OR-Phase 0-4, OR-Track A, OR-Track B, and OR-Track F0 (the real
+CLI) are all done. Nothing wired to a real addon yet.** `OpenChara`/`Claude
+Waifus` keep building via `node tools/openchara.js <cmd>` exactly as
+before - this repo has zero effect on that workflow until OR-Track J's
+actual, deliberate cutover.
+
+**A real `openrock` CLI now exists** (`bin/openrock.js`): `build`,
+`check`, `export`, `deploy`, `dev`, `log` all work end to end, tested
+against dummy fixture mods/libraries and via real child-process CLI
+invocations (`test/buildPipeline.test.js`, `test/cli.test.js`) - never
+against real Claude Waifus, so none of this carries any cutover risk. See
+"Build pipeline & CLI" below.
 
 The full phased design (manifest shape, library lifecycle, MCLite's
 generalized API, submodule wiring, the OR-Track A-J ecosystem expansion,
@@ -43,10 +49,11 @@ before touching any phase past this one.
 
 ## Directory layout
 
-- `bin/openrock.js` - future CLI entry point (unwired until OR-Track F0).
+- `bin/openrock.js` - the real CLI (`build`/`check`/`export`/`deploy`/
+  `dev`/`log`, OR-Track F0).
 - `src/kernel.js` - the registry core (`createRegistry`/`createKernel`).
 - `src/libLoader.js` - topological load ordering (`topoSort`/`loadLibraries`).
-- `src/manifest.js` - manifest schema + validator.
+- `src/manifest.js` - manifest schema + validator + `loadManifestFile()`.
 - `src/resolver.js` - version/breaks/conflicts resolution across a whole
   load set, run before `topoSort` (OR-Track A3).
 - `src/semver.js` - a scoped-down, dependency-free semver range
@@ -54,10 +61,18 @@ before touching any phase past this one.
   alternative-set support - see the file header).
 - `src/compat.js` - version-keyed API selection (`isVersionedApi`,
   `selectApiVersion`), applied automatically by `libLoader.js` (OR-Track B2).
+- `src/fsTree.js` - generic directory walking + diff-based tree writing
+  (`walk`/`writeTree`) and the shared/merged-registry-file logic
+  (`MERGED_FILES`/`mergeRegistry`), OR-Track F0.
+- `src/buildPipeline.js` - `buildMod()`: a mod manifest + its resolved
+  dependency tree -> BP/RP file maps, OR-Track F0.
+- `src/zip.js` - a dependency-free `.mcaddon` ZIP writer.
 - `test/` - `kernel.test.js`, `semver.test.js`, `resolver.test.js`,
-  `compat.test.js`, plus a `*-integration.test.js` per feature that needs a
-  real `loadLibraries()` call to prove (not just the unit's own isolated
-  logic), and dummy fixture libraries `kernel.test.js` loads.
+  `compat.test.js`, `buildPipeline.test.js`, `cli.test.js` (a real
+  child-process CLI invocation), plus a `*-integration.test.js` per feature
+  that needs a real `loadLibraries()` call to prove (not just the unit's
+  own isolated logic), and dummy fixture libraries/mods `kernel.test.js`
+  and `buildPipeline.test.js` load.
 - `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B,
   now complete: `@openrock/registries`, `@openrock/capabilities`,
   `@openrock/compat`, `@openrock/config`, `@openrock/events`,
@@ -147,13 +162,14 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   `selectApiVersion`), which `libLoader.js` already applies automatically
   to every "library"-type dependency's `apiVersion` field (see "Manifest
   v2" above) - this library is for anything that wants the same resolution
-  manually (a debugging tool, the future CLI's `openrock info`).
+  manually (a debugging tool, a future `openrock info` CLI command).
 - **`@openrock/config`** (`libs/config/`) - per-mod configuration, two ways.
   `bakeConfig(modName, overrides)` is the build-time-baked path: merges
   declared defaults with an overrides object (whatever a future build step
   reads from `mod.config.json`) and validates the result, throwing on
-  anything invalid rather than silently falling back - a real CLI wiring
-  this in at build time is OR-Track F0's job, not a redesign of this
+  anything invalid rather than silently falling back - `bin/openrock.js`
+  (OR-Track F0) exists now, but doesn't yet call `bakeConfig` as part of a
+  real build; wiring that in is a CLI change, not a redesign of this
   module. `readRuntimeConfig`/`writeRuntimeConfig` are the runtime-mutable
   path, built directly on `@openrock/capabilities` - real and testable
   today even though the in-game screen for editing it (Track D, or
@@ -191,14 +207,56 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
 - **`@openrock/datagen`** (`libs/datagen/`) - Node-side, build-time-only
   typed builders for Bedrock content JSON: `buildShapelessRecipe`,
   `buildShapedRecipe`, `buildFurnaceRecipe`, `buildLootTable`, `buildItem`,
-  `buildBlock`. Nothing here runs in-game; a future OR-Track F0 CLI is what
-  actually calls these at package time and writes the results to files.
-  Deliberately scoped to the common, well-documented shapes - not every
+  `buildBlock`. Nothing here runs in-game; `bin/openrock.js` doesn't yet
+  call these as part of a real build (a mod's own build script/content
+  scripts call them directly today). Deliberately scoped to the common,
+  well-documented shapes - not every
   possible recipe/component variant - with structural validation
   (namespaced ids, required fields) on every builder.
 
 **All seven OR-Track B API-surface libraries are now built**: `registries`,
 `capabilities`, `compat`, `config`, `events`, `networking`, `datagen`.
+
+## Build pipeline & CLI (OR-Track F0)
+
+`bin/openrock.js build|check|export|deploy|dev|log <modDir>` - a real,
+working CLI, generalized from OpenChara's own `tools/lib/build.js` but with
+zero character/species/quest-specific logic. Given a mod's
+`openrock.mod.json`, it:
+
+1. Resolves the mod's full dependency tree - `"submodule"`-type deps
+   against `<modDir>/vendor/`, `"library"`-type deps against OpenRock's own
+   bundled `libs/*` by name (`resolveBundledLibraryDirs()`) - and orders
+   everything via `libLoader.js`'s own `topoSort` (dependency order, mod
+   last), the exact same ordering the runtime kernel uses.
+2. For every package in that order (each library, then the mod itself),
+   copies its declared `content.bpOverlayDir`/`rpOverlayDir` files into the
+   output (with `{{ns}}` filled from that package's own namespace, and
+   `fsTree.js`'s `MERGED_FILES` registry-merge for shared files like
+   `item_texture.json` - a library's and a mod's own entries both survive),
+   and its `content.scriptsDir` files into `scripts/<package>/`.
+3. Generates `scripts/main.js` (imports every package's own scripts, in
+   dependency order) and a real BP/RP `manifest.json` from the mod's
+   `packs`/`version`/`engine` fields.
+4. `writeTree()` (also `fsTree.js`) writes the result as a diff - only
+   changed files touched, stale ones removed - the same mechanism
+   `dev`'s watch loop and `deploy` both rely on.
+
+**A real, load-bearing open question surfaced while building this** (see
+`buildPipeline.js`'s own header comment for the full writeup): `scriptsDir`
+files are copied as opaque bytes and only ever referenced by a generated
+`import` line - this pipeline never requires or executes them. That's
+correct for ITS job, but it means OR-Track B's kernel/libLoader/library
+system (all plain Node CommonJS, so it's testable with `node test.js`) has
+never been shown to actually run inside Minecraft's real script engine,
+which only supports ES modules. Whether/how that gets bridged is genuinely
+unresolved - OR-Track D/J's problem once OpenChara's real in-game code
+actually consumes these libraries, not assumed solved here.
+
+Tested against dummy fixture mods/libraries only
+(`test/fixtures/build-lib`, `build-mod`) and via real child-process CLI
+invocations producing a genuine `.mcaddon` ZIP - never against real Claude
+Waifus, so none of OR-Track F0 carries cutover risk.
 
 ## Submodule workflow
 
@@ -226,7 +284,7 @@ version of MinUI/MCLite, check `git submodule status` first.
 ## Development
 
 ```bash
-npm test   # kernel, semver, resolver, every *-integration.test.js, and every libs/*/test
+npm test   # kernel, semver, resolver, buildPipeline, cli, every *-integration.test.js, and every libs/*/test
 ```
 
 ## Contributing

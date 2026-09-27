@@ -1,0 +1,9 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "build-lib",
+  "version": "1.0.0",
+  "entry": "register.js",
+  "content": { "scriptsDir": "scripts", "bpOverlayDir": "bp", "rpOverlayDir": "rp" },
+  "provides": { "api": "register.js" }
+}

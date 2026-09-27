@@ -151,6 +151,46 @@ test("validateManifest: rejects a breaks entry missing a name", () => {
     assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", breaks: [{ versionRange: "^1.0.0" }] }), /\.name is required/);
 });
 
+// ---- validateManifest: OR-Track F0 fields (mod namespace/packs, content) ----
+
+function validModPacks() {
+    return {
+        namespace: "cw",
+        packs: {
+            behavior: { folder: "Mod B", uuid: "u1", dataModuleUuid: "u2", scriptModuleUuid: "u3" },
+            resource: { folder: "Mod R", uuid: "u4", moduleUuid: "u5" },
+        },
+    };
+}
+
+test("validateManifest: accepts a well-formed mod manifest with namespace and packs", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", ...validModPacks() }));
+});
+
+test("validateManifest: rejects a mod manifest missing namespace", () => {
+    const { packs } = validModPacks();
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", packs }), /"namespace" must be lowercase/);
+});
+
+test("validateManifest: rejects a mod manifest missing packs", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", namespace: "cw" }), /requires "packs"/);
+});
+
+test("validateManifest: rejects a mod manifest with an incomplete packs.behavior", () => {
+    const p = validModPacks();
+    delete p.packs.behavior.scriptModuleUuid;
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", ...p }), /packs\.behavior\.scriptModuleUuid is required/);
+});
+
+test("validateManifest: accepts an optional content block on either kind", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "mod", name: "x", version: "1.0.0", ...validModPacks(), content: { scriptsDir: "PATCHES/scripts", bpOverlayDir: "PATCHES/bp" } }));
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "y", version: "1.0.0", entry: "x.js", content: { rpOverlayDir: "rp" } }));
+});
+
+test("validateManifest: rejects a non-string content field", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", content: { scriptsDir: 5 } }), /content\.scriptsDir must be a string path/);
+});
+
 // ---- resolveDependency -----------------------------------------------
 
 test("resolveDependency: resolves a submodule dependency to a vendorDir path", () => {

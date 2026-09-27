@@ -91,7 +91,60 @@ function validateManifest(manifest) {
     }
     if (manifest.kind === "mod") {
         if (manifest.provides) throw new Error(`mod manifest "${manifest.name}" must not declare "provides" - mods are leaf packages`);
+        if (typeof manifest.namespace !== "string" || !/^[a-z][a-z0-9_]*$/.test(manifest.namespace)) throw new Error(`mod manifest "${manifest.name}": "namespace" must be lowercase letters/digits/underscores`);
+        validatePacks(manifest);
     }
+
+    // content (OR-Track F0): where a package's own build-time inputs live,
+    // relative to its own manifest's directory. Optional on BOTH kinds - a
+    // pure script library (e.g. @openrock/registries) has none of this; a
+    // library that DOES contribute real in-world assets (OR-Track K's
+    // runtime addon is the deliberate example) can still declare it, same
+    // as a mod would.
+    if (manifest.content !== undefined) {
+        const c = manifest.content;
+        if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir"]) {
+            if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
+        }
+    }
+}
+
+// A mod (and OR-Track K's hybrid libraries, later) needs real pack UUIDs to
+// build into a deployable BP/RP pair - a pure script library never does.
+function validatePacks(manifest) {
+    const p = manifest.packs;
+    if (!p || typeof p !== "object") throw new Error(`mod manifest "${manifest.name}" requires "packs"`);
+    const need = (cond, msg) => { if (!cond) throw new Error(`mod manifest "${manifest.name}": ${msg}`); };
+    need(p.behavior && typeof p.behavior === "object", `packs.behavior is required`);
+    need(typeof p.behavior.folder === "string" && p.behavior.folder, `packs.behavior.folder is required`);
+    need(typeof p.behavior.uuid === "string" && p.behavior.uuid, `packs.behavior.uuid is required`);
+    need(typeof p.behavior.dataModuleUuid === "string" && p.behavior.dataModuleUuid, `packs.behavior.dataModuleUuid is required`);
+    need(typeof p.behavior.scriptModuleUuid === "string" && p.behavior.scriptModuleUuid, `packs.behavior.scriptModuleUuid is required`);
+    need(p.resource && typeof p.resource === "object", `packs.resource is required`);
+    need(typeof p.resource.folder === "string" && p.resource.folder, `packs.resource.folder is required`);
+    need(typeof p.resource.uuid === "string" && p.resource.uuid, `packs.resource.uuid is required`);
+    need(typeof p.resource.moduleUuid === "string" && p.resource.moduleUuid, `packs.resource.moduleUuid is required`);
+}
+
+/**
+ * Loads and validates a manifest file from `dir` (tries openrock.mod.json,
+ * then openrock.library.json). Returns `{manifest, dir}` - `dir` travels
+ * with the manifest since every path in `content`/`dependsOn.submodule` is
+ * relative to it, not to the caller's own cwd.
+ */
+function loadManifestFile(dir) {
+    const fs = require("fs");
+    for (const filename of ["openrock.mod.json", "openrock.library.json"]) {
+        const file = path.join(dir, filename);
+        if (!fs.existsSync(file)) continue;
+        let manifest;
+        try { manifest = JSON.parse(fs.readFileSync(file, "utf8")); }
+        catch (e) { throw new Error(`${file}: ${e.message}`); }
+        validateManifest(manifest);
+        return { manifest, dir };
+    }
+    throw new Error(`No openrock.mod.json or openrock.library.json found in ${dir}`);
 }
 
 /**
@@ -117,4 +170,4 @@ function resolveDependency(manifest, depName, { vendorDir, loadedLibraries } = {
     throw new Error(`resolveDependency("${depName}"): unknown dependency type "${dep.type}"`);
 }
 
-module.exports = { validateManifest, resolveDependency, VALID_KINDS, VALID_DEP_TYPES, RELATION_ARRAYS };
+module.exports = { validateManifest, resolveDependency, loadManifestFile, VALID_KINDS, VALID_DEP_TYPES, RELATION_ARRAYS };
