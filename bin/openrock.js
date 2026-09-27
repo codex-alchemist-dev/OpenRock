@@ -13,7 +13,11 @@
 //   openrock dev    <modDir>   deploy, then watch the mod and its vendored
 //                              dependencies for changes and redeploy automatically
 //   openrock log    <modDir>   show this mod's errors/warnings from Minecraft's
-//                              newest content log (--all: every pack; --follow: keep tailing)
+//                              newest content log (--all: every pack; --follow: keep
+//                              tailing; --filter=<regex>: narrow further, OR-Track C1)
+//   openrock debug  <modDir>   OR-Track C2 Stage 1: --launch-vscode writes a real
+//                              VS Code launch.json for Mojang's official
+//                              minecraft-js debugger extension (port 19144)
 //
 // <modDir> is the folder containing openrock.mod.json (defaults to the
 // current directory). A mod's "library"-type dependencies are resolved
@@ -39,7 +43,7 @@ const { zip } = require("../src/zip.js");
 const { loadManifestFile } = require("../src/manifest.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
-const COMMANDS = ["build", "check", "export", "deploy", "dev", "log"];
+const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug"];
 
 function stamp() { return new Date().toTimeString().slice(0, 8); }
 
@@ -160,9 +164,21 @@ function cmdDev(dir) {
 }
 
 function logDir() {
+    if (process.env.OPENROCK_LOG_DIR) return process.env.OPENROCK_LOG_DIR;
     const appdata = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
     const dirs = [path.join(appdata, "Minecraft Bedrock", "logs"), path.join(process.env.LOCALAPPDATA || "", "Packages", "Microsoft.MinecraftUWP_8wekyb3d8bbwe", "LocalState", "logs")];
     return dirs.find(d => fs.existsSync(d)) ?? null;
+}
+
+// OR-Track C1: --filter=<regex> narrows the same tailer to a caller-chosen
+// pattern, on top of (or, with --all, instead of) the usual project-scoped
+// needle match - no new protocol work, purely a filter refinement over the
+// existing content-log mechanism.
+function parseLogFilter(flags) {
+    const raw = flags.find(f => f.startsWith("--filter="));
+    if (!raw) return null;
+    try { return new RegExp(raw.slice("--filter=".length)); }
+    catch (e) { throw new Error(`--filter: invalid regular expression: ${e.message}`); }
 }
 
 function cmdLog(modDir, flags) {
@@ -177,12 +193,14 @@ function cmdLog(modDir, flags) {
     const needles = manifest && !flags.includes("--all")
         ? [manifest.packs.behavior.folder, manifest.packs.resource.folder, `${manifest.namespace}:`, "[Scripting]", "[UI]"]
         : null;
+    const customFilter = parseLogFilter(flags);
     const clean = l => l.replace(/%APPDATA%\/Minecraft Bedrock\/Users\/Shared\/games\/com\.mojang\/development_(behavior|resource)_packs\//g, "");
     const show = text => {
         const counts = new Map();
         for (const raw of text.split(/\r?\n/)) {
             if (!/\[(error|warning)\]/i.test(raw)) continue;
             if (needles && !needles.some(n => raw.includes(n))) continue;
+            if (customFilter && !customFilter.test(raw)) continue;
             const key = clean(raw.replace(/^\d\d:\d\d:\d\d/, "")).trim();
             counts.set(key, (counts.get(key) ?? 0) + 1);
         }
@@ -190,7 +208,7 @@ function cmdLog(modDir, flags) {
         return counts.size;
     };
     const full = path.join(dir, file);
-    console.log(`${file}${needles ? ` (filtered to ${manifest.name}; --all for everything)` : ""}:`);
+    console.log(`${file}${needles ? ` (filtered to ${manifest.name}; --all for everything)` : ""}${customFilter ? ` (--filter=${customFilter.source})` : ""}:`);
     const n = show(fs.readFileSync(full, "utf8"));
     if (!n) console.log("     no errors or warnings");
     if (!flags.includes("--follow")) return;
@@ -208,6 +226,49 @@ function cmdLog(modDir, flags) {
     }, 1000);
 }
 
+// OR-Track C2 Stage 1: orchestrate Mojang's OWN official "minecraft-js"
+// VS Code debugger extension rather than building a DAP client from
+// scratch - pure glue, generating the exact launch.json shape that
+// extension expects (a real Debug Adapter Protocol client against
+// Minecraft's built-in script debug port, 19144). This is also the exact
+// source-map wiring OR-Track D2's future TypeScript authoring pipeline
+// will need, so building it now isn't wasted even before real .map files
+// exist. `mode` defaults to "listen" - double-check this against Mojang's
+// own current minecraft-debugger README before relying on it, since which
+// side initiates the connection is the one detail here not independently
+// re-verified in this pass.
+function cmdDebug(modDir, flags) {
+    if (!flags.includes("--launch-vscode")) {
+        console.log("Usage: openrock debug --launch-vscode [--mode=connect|listen] <modDir>");
+        console.log('Writes .vscode/launch.json for Mojang\'s official "minecraft-js" debugger extension (port 19144).');
+        return;
+    }
+    const { manifest } = loadManifestFile(modDir);
+    const modeFlag = flags.find(f => f.startsWith("--mode="));
+    const mode = modeFlag ? modeFlag.slice("--mode=".length) : "listen";
+    if (mode !== "connect" && mode !== "listen") throw new Error(`--mode must be "connect" or "listen", got "${mode}"`);
+
+    const vscodeDir = path.join(modDir, ".vscode");
+    fs.mkdirSync(vscodeDir, { recursive: true });
+    const launchJsonPath = path.join(vscodeDir, "launch.json");
+    const existing = fs.existsSync(launchJsonPath) ? JSON.parse(fs.readFileSync(launchJsonPath, "utf8")) : { version: "0.2.0", configurations: [] };
+    const scriptsSubdir = manifest.content?.scriptsDir ? path.relative(modDir, path.join(modDir, manifest.content.scriptsDir)).split(path.sep).join("/") : "scripts";
+    const config = {
+        type: "minecraft-js",
+        request: "attach",
+        mode,
+        port: 19144,
+        sourceMapRoot: `\${workspaceFolder}/${scriptsSubdir}/`,
+        generatedSourceRoot: `\${workspaceFolder}/build/${manifest.packs.behavior.folder}/scripts/`,
+    };
+    const idx = existing.configurations.findIndex(c => c.type === "minecraft-js" && c.name === `Debug ${manifest.name}`);
+    if (idx >= 0) existing.configurations[idx] = { name: `Debug ${manifest.name}`, ...config };
+    else existing.configurations.push({ name: `Debug ${manifest.name}`, ...config });
+    fs.writeFileSync(launchJsonPath, JSON.stringify(existing, null, 2) + "\n");
+    console.log(`[${stamp()}] Wrote ${launchJsonPath}`);
+    console.log(`Install Mojang's "Minecraft Bedrock Edition" VS Code extension, enable the world's script debugger, then Run > Start Debugging ("Debug ${manifest.name}").`);
+}
+
 function main() {
     const args = process.argv.slice(2);
     const flags = args.filter(a => a.startsWith("--"));
@@ -221,6 +282,7 @@ function main() {
             case "deploy": cmdDeploy(modDir); break;
             case "dev": cmdDev(modDir); break;
             case "log": cmdLog(modDir, flags); break;
+            case "debug": cmdDebug(modDir, flags); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);
                 process.exitCode = cmd ? 1 : 0;

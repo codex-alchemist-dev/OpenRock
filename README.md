@@ -4,9 +4,10 @@ An open-source library system for Minecraft Bedrock addon development.
 Plain JS/Node modules + a manifest.json (no custom DSL) for libraries and
 mods.
 
-**Status: OR-Phase 0-4, OR-Track A, OR-Track B, and OR-Track F (F0 the real
-CLI, F1 multi-mod dev mode) are all done. Nothing wired to a real addon
-yet.** `OpenChara`/`Claude
+**Status: OR-Phase 0-4, OR-Track A, OR-Track B, OR-Track F (F0 the real
+CLI, F1 multi-mod dev mode), and OR-Track C Tier 1 + Tier 2 Stage 1 (log
+tailer + VS Code debugger launch config) are all done. Nothing wired to a
+real addon yet.** `OpenChara`/`Claude
 Waifus` keep building via `node tools/openchara.js <cmd>` exactly as
 before - this repo has zero effect on that workflow until OR-Track J's
 actual, deliberate cutover.
@@ -276,6 +277,30 @@ In multi-mod mode:
   piecemeal later (verified with a real fixture: `mod-b` declaring
   `breaks: [{name: "mod-a"}]` makes `dev` refuse to start at all,
   end to end through a real CLI invocation).
+
+## Debugger (OR-Track C)
+
+- **Tier 1, `openrock log <modDir> [--all] [--follow] [--filter=<regex>]`**:
+  tails Minecraft's own content log (JSON UI and entity-definition errors
+  never surface in-game, only there), scoped to this mod's pack
+  folders/namespace by default. `--filter=<regex>` narrows further to a
+  caller-chosen pattern, on top of (or with `--all`, instead of) the
+  default project scoping - no new protocol work, purely a refinement.
+- **Tier 2 Stage 1, `openrock debug <modDir> --launch-vscode
+  [--mode=connect|listen]`**: writes a real `.vscode/launch.json` entry for
+  Mojang's own official "minecraft-js" VS Code debugger extension - a
+  genuine Debug Adapter Protocol client against Minecraft's real built-in
+  script debug port, **19144**. Orchestrating the official extension
+  (rather than building a DAP client from scratch) is pure glue, and it's
+  also the exact source-map wiring OR-Track D2's future TypeScript
+  authoring pipeline will need - worth having now even before real `.map`
+  files exist. Re-running updates the same config entry (matched by mod
+  name) rather than duplicating it.
+- **Tier 2 Stage 2** (a minimal in-house terminal DAP client, for working
+  without VS Code at all) is explicitly **not attempted** - it needs its
+  own dedicated research spike against a real, running Minecraft instance
+  to verify the actual wire handshake, which isn't something to guess at
+  from documentation alone.
 
 ## Submodule workflow
 

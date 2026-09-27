@@ -94,6 +94,53 @@ test("openrock deploy: writes into OPENROCK_COM_MOJANG's development pack folder
     assert.ok(fs.existsSync(path.join(fakeComMojang, "development_resource_packs", "CLI Test R", "manifest.json")));
 });
 
+test("openrock log --filter=<regex>: narrows the tailer to a caller-chosen pattern (OR-Track C1)", () => {
+    const modDir = makeStandaloneMod();
+    const fakeLogDir = fs.mkdtempSync(path.join(os.tmpdir(), "openrock-cli-logs-"));
+    fs.writeFileSync(path.join(fakeLogDir, "ContentLog_1.txt"), [
+        "10:00:00 [Scripting] [error] CLI Test B: something broke in ctm:widget",
+        "10:00:01 [Scripting] [warning] CLI Test B: an unrelated warning about ctm:other",
+    ].join("\n") + "\n");
+    const env = { ...process.env, OPENROCK_LOG_DIR: fakeLogDir };
+    const output = execFileSync(process.execPath, [CLI, "log", modDir, "--filter=widget"], { encoding: "utf8", env });
+    assert.match(output, /ctm:widget/);
+    assert.doesNotMatch(output, /ctm:other/);
+});
+
+test("openrock debug --launch-vscode: writes a real launch.json for Mojang's minecraft-js extension", () => {
+    const modDir = makeStandaloneMod();
+    const output = run(["debug", modDir, "--launch-vscode"]);
+    assert.match(output, /Wrote/);
+    const launchJson = JSON.parse(fs.readFileSync(path.join(modDir, ".vscode", "launch.json"), "utf8"));
+    const config = launchJson.configurations.find(c => c.type === "minecraft-js");
+    assert.ok(config, "expected a minecraft-js configuration");
+    assert.strictEqual(config.request, "attach");
+    assert.strictEqual(config.port, 19144);
+    assert.strictEqual(config.mode, "listen");
+    assert.strictEqual(config.name, "Debug cli-test-mod");
+});
+
+test("openrock debug --launch-vscode --mode=connect: honors an explicit mode, rejects a bad one", () => {
+    const modDir = makeStandaloneMod();
+    run(["debug", modDir, "--launch-vscode", "--mode=connect"]);
+    const launchJson = JSON.parse(fs.readFileSync(path.join(modDir, ".vscode", "launch.json"), "utf8"));
+    assert.strictEqual(launchJson.configurations[0].mode, "connect");
+
+    let threw = false;
+    try { run(["debug", modDir, "--launch-vscode", "--mode=bogus"]); }
+    catch (e) { threw = true; assert.match(e.stderr ?? e.message, /--mode must be "connect" or "listen"/); }
+    assert.strictEqual(threw, true);
+});
+
+test("openrock debug --launch-vscode: re-running updates the SAME entry rather than duplicating it", () => {
+    const modDir = makeStandaloneMod();
+    run(["debug", modDir, "--launch-vscode"]);
+    run(["debug", modDir, "--launch-vscode", "--mode=connect"]);
+    const launchJson = JSON.parse(fs.readFileSync(path.join(modDir, ".vscode", "launch.json"), "utf8"));
+    assert.strictEqual(launchJson.configurations.filter(c => c.type === "minecraft-js").length, 1);
+    assert.strictEqual(launchJson.configurations[0].mode, "connect");
+});
+
 test("openrock dev (multi-mod): a cross-mod breaks conflict is caught before anything deploys", () => {
     const modsDir = path.join(__dirname, "fixtures", "mods-dir"); // mod-b declares breaks: [{name: "mod-a"}]
     let threw = false;
