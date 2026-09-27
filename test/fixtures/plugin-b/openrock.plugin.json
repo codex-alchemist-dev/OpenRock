@@ -1,0 +1,11 @@
+{
+  "openrockVersion": 1,
+  "kind": "plugin",
+  "name": "plugin-b",
+  "version": "1.0.0",
+  "entry": "register.js",
+  "dependsOn": {
+    "plugin-a": { "type": "plugin", "version": "^1.0.0" }
+  },
+  "provides": { "api": "register.js" }
+}

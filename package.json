@@ -6,6 +6,9 @@
   "bin": {
     "openrock": "bin/openrock.js"
   },
+  "scripts": {
+    "test": "node test/kernel.test.js"
+  },
   "engines": {
     "node": ">=18"
   }

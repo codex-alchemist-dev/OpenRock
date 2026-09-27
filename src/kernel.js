@@ -1,20 +1,47 @@
-// OpenRock's kernel - the registry/plugin-loading core every plugin and
-// mod runs against. This is a scaffold only (OR-Phase 1 in
-// happy-wibbling-pie.md): the real createRegistry()/pluginLoader
-// implementation is designed and built in OR-Phase 3, tested against
-// throwaway dummy plugins before anything real (OpenChara, Claude Waifus)
-// ever touches it.
-//
-// Target shape (OR-Phase 3):
-//   createRegistry(name, { validate }) -> { register, get, has, invoke, keys }
-//     Generalizes the Map + register() + safe-default + try/catch-and-warn
-//     pattern already proven twice in OpenChara (hooks.js, conditions.js).
-//   loadPlugins(manifests) -> topologically sorts by dependsOn, calls each
-//     plugin's register(kernel, ctx) in dependency order, mods always last.
+// OpenRock's kernel - the registry core every plugin/mod registers against.
+// Generalizes the Map + register() + safe-default + try/catch-and-warn
+// pattern already proven twice in OpenChara (hooks.js, conditions.js).
+// See "OpenRock Mod Packager — Phased Implementation Plan", OR-Phase 3, in
+// the project plan document for the full design this implements.
 "use strict";
 
-function createRegistry(/* name, opts */) {
-    throw new Error("kernel.createRegistry() is not implemented yet - see OR-Phase 3 in happy-wibbling-pie.md.");
+// A single named registry: register(key, def), then either read it back
+// directly (get/has, for callers that need the raw def) or invoke() it
+// safely (a throwing def is caught and logged, never crashes the caller -
+// exactly hooks.js's existing try/catch-and-warn convention).
+function createRegistry(name, { validate } = {}) {
+    const entries = new Map();
+    return {
+        register(key, def) {
+            if (validate) validate(key, def);
+            entries.set(key, def);
+        },
+        get(key) { return entries.get(key); },
+        has(key) { return entries.has(key); },
+        invoke(key, ...args) {
+            const def = entries.get(key);
+            if (!def) return undefined;
+            try { return def(...args); }
+            catch (e) { console.warn(`[openrock:${name}] "${key}" failed: ${e}`); return undefined; }
+        },
+        keys() { return [...entries.keys()]; },
+    };
 }
 
-module.exports = { createRegistry };
+// The kernel is just a lazily-created set of named registries, shared by
+// every plugin loaded into one process/build. `kernel.hooks`,
+// `kernel.conditions`, `kernel.mclite` etc. are created on first access by
+// whichever plugin asks for them first - a plugin never needs to declare
+// a registry before using it, matching how hooks.js/conditions.js today
+// just exist as already-created singletons.
+function createKernel() {
+    const registries = new Map();
+    return {
+        registry(name, opts) {
+            if (!registries.has(name)) registries.set(name, createRegistry(name, opts));
+            return registries.get(name);
+        },
+    };
+}
+
+module.exports = { createRegistry, createKernel };
