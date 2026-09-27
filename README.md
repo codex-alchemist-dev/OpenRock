@@ -51,10 +51,15 @@ before touching any phase past this one.
 - `src/semver.js` - a scoped-down, dependency-free semver range
   implementation (`^`, `~`, x-ranges, hyphen ranges, comparators; no `||`
   alternative-set support - see the file header).
-- `test/` - `kernel.test.js`, `semver.test.js`, `resolver.test.js`, plus
-  dummy fixture libraries `kernel.test.js` loads.
+- `src/compat.js` - version-keyed API selection (`isVersionedApi`,
+  `selectApiVersion`), applied automatically by `libLoader.js` (OR-Track B2).
+- `test/` - `kernel.test.js`, `semver.test.js`, `resolver.test.js`,
+  `compat.test.js`, plus a `*-integration.test.js` per feature that needs a
+  real `loadLibraries()` call to prove (not just the unit's own isolated
+  logic), and dummy fixture libraries `kernel.test.js` loads.
 - `libs/` - OpenRock's own first-party API-surface libraries (OR-Track B:
-  `@openrock/registries` so far, more to follow) plus local library dev
+  `@openrock/registries`, `@openrock/capabilities`, `@openrock/compat` so
+  far, more to follow) plus local library dev
   checkouts for anything else.
 - `mods/` - local mod dev checkouts (empty for now).
 - `vendor/` - git submodules (MinUI, MCLite), pinned to
@@ -83,6 +88,16 @@ A `dependsOn` entry of `type: "library"` can now carry:
   load first, but the dependent never receives it via `ctx.dependencies` -
   useful for "integrate with X if it happens to be around, but don't
   actually call into it."
+- `apiVersion` (OR-Track B2) - a **separate concept from `versionRange`**,
+  deliberately its own field: `versionRange` checks the provider's own
+  package version (`manifest.version`); `apiVersion` picks which internal
+  API *generation* to receive from a provider whose exported API is
+  version-keyed (`{ "1.0.0": apiV1, "2.0.0": apiV2 }` - see
+  `src/compat.js`), for a provider that keeps an old shape alive alongside
+  a new one without its package version needing to track every consumer's
+  pinned generation. Resolved per-consumer, so two different mods
+  depending on the same library can each get the generation they asked
+  for. Absent means "give me the highest exposed generation."
 
 A manifest can also declare, at the top level, arrays of `{name,
 versionRange?}` matching Modrinth's real `dependency_type` categories:
@@ -125,8 +140,14 @@ Fabric/NeoForge-style shared building blocks, each a normal `kind:
   An explicit `validate()` can still be passed to override the
   schema-generated one for anything the flat schema language can't
   express.
+- **`@openrock/compat`** (`libs/compat/`) - the requireable-by-name surface
+  of `src/compat.js`'s version-selection logic (`isVersionedApi`,
+  `selectApiVersion`), which `libLoader.js` already applies automatically
+  to every "library"-type dependency's `apiVersion` field (see "Manifest
+  v2" above) - this library is for anything that wants the same resolution
+  manually (a debugging tool, the future CLI's `openrock info`).
 - More to follow: `@openrock/events`, `@openrock/networking`,
-  `@openrock/config`, `@openrock/datagen`, `@openrock/compat`.
+  `@openrock/config`, `@openrock/datagen`.
 
 ## Submodule workflow
 

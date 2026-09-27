@@ -38,6 +38,19 @@ function validateManifest(manifest) {
             if (dep.type !== "library") throw new Error(`manifest.dependsOn.${depName}: "versionRange" is only valid on a "library" dependency`);
             if (typeof dep.versionRange !== "string" || !semver.isValidRange(dep.versionRange)) throw new Error(`manifest.dependsOn.${depName}.versionRange "${dep.versionRange}" is not a valid semver range`);
         }
+        // apiVersion (B2): a SEPARATE concept from versionRange - versionRange
+        // checks the provider's own PACKAGE version (manifest.version);
+        // apiVersion picks which internal API generation to receive from a
+        // provider that exposes a version-keyed API object (compat.js's
+        // selectApiVersion), when that provider's package version doesn't
+        // move in lockstep with every API shape it still supports. The two
+        // are deliberately independent fields precisely so a provider can
+        // bump its own release version freely without invalidating an old
+        // consumer's pinned apiVersion.
+        if (dep.apiVersion !== undefined) {
+            if (dep.type !== "library") throw new Error(`manifest.dependsOn.${depName}: "apiVersion" is only valid on a "library" dependency`);
+            if (typeof dep.apiVersion !== "string" || !semver.isValidRange(dep.apiVersion)) throw new Error(`manifest.dependsOn.${depName}.apiVersion "${dep.apiVersion}" is not a valid semver range`);
+        }
         // optional (A1): orders if present, never fails loadLibraries if the
         // target is absent from the load set - ctx.dependencies[name] is
         // then explicitly undefined rather than the load failing.

@@ -7,6 +7,7 @@
 const { createKernel } = require("./kernel.js");
 const { resolveManifestSet } = require("./resolver.js");
 const { resolveDependency } = require("./manifest.js");
+const { selectApiVersion } = require("./compat.js");
 
 /**
  * @param {Array<{manifest: object, register: Function}>} entries
@@ -70,6 +71,17 @@ function topoSort(entries) {
  * submodule like MCLite - a consuming library's register() never has to
  * know or care which kind of dependency it received.
  *
+ * A "library"-type dependency's exported API is also run through
+ * compat.js's selectApiVersion() (OR-Track B2) - a provider that exposes a
+ * version-keyed API object (`{ "1.0.0": apiV1, "2.0.0": apiV2 }`) gets
+ * resolved PER CONSUMING ENTRY, against that specific consumer's own
+ * declared `apiVersion` (deliberately a SEPARATE field from `versionRange`
+ * - see manifest.js's own comment on why), so two different mods depending
+ * on the same library can each receive the API generation they actually
+ * asked for. A provider with an ordinary (non-version-keyed) API is
+ * unaffected - selectApiVersion returns it unchanged regardless of
+ * `apiVersion`.
+ *
  * @param {Array<{manifest: object, register: Function}>} entries
  * @param {object} [opts]
  * @param {string} [opts.vendorDir] - required only if some entry has a
@@ -88,7 +100,7 @@ function loadLibraries(entries, { vendorDir } = {}) {
             // A "soft" dependency is load-order-only (OR-Track A1) - it
             // never receives a ctx.dependencies entry, even when present.
             if (dep.soft) continue;
-            if (dep.type === "library") dependencies[depName] = exportsByName.get(depName);
+            if (dep.type === "library") dependencies[depName] = selectApiVersion(exportsByName.get(depName), dep.apiVersion);
             else if (dep.type === "submodule") dependencies[depName] = require(resolveDependency(manifest, depName, { vendorDir }));
         }
         const ctx = { manifest, dependencies };

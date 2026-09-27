@@ -117,6 +117,18 @@ test("validateManifest: rejects a malformed versionRange", () => {
     assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", versionRange: "^not-a-version" } } }), /not a valid semver range/);
 });
 
+test("validateManifest: accepts an apiVersion on a library dependency (separate field from versionRange)", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", apiVersion: "^2.0.0" } } }));
+});
+
+test("validateManifest: rejects an apiVersion on a submodule dependency", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "submodule", path: "vendor/y", apiVersion: "^2.0.0" } } }), /only valid on a "library" dependency/);
+});
+
+test("validateManifest: rejects a malformed apiVersion", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", apiVersion: "^not-a-version" } } }), /not a valid semver range/);
+});
+
 test("validateManifest: accepts optional/soft booleans on a library dependency", () => {
     assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", optional: true }, z: { type: "library", soft: true } } }));
 });
