@@ -1,4 +1,4 @@
-// Topological plugin/mod loading, by dependsOn's "plugin"-type entries.
+// Topological library/mod loading, by dependsOn's "library"-type entries.
 // See "OpenRock Mod Packager — Phased Implementation Plan", OR-Phase 3.
 "use strict";
 
@@ -7,7 +7,7 @@ const { createKernel } = require("./kernel.js");
 /**
  * @param {Array<{manifest: object, register: Function}>} entries
  * @returns {Array<{manifest, register}>} entries in load order: every
- *   plugin dependency before its dependent, mods always last.
+ *   library dependency before its dependent, mods always last.
  */
 function topoSort(entries) {
     const byName = new Map(entries.map(e => [e.manifest.name, e]));
@@ -17,15 +17,15 @@ function topoSort(entries) {
 
     function visit(name) {
         if (visited.has(name)) return;
-        if (visiting.has(name)) throw new Error(`Circular plugin dependency detected at "${name}"`);
+        if (visiting.has(name)) throw new Error(`Circular library dependency detected at "${name}"`);
         const entry = byName.get(name);
-        if (!entry) throw new Error(`Unknown plugin dependency "${name}" (not in the set of entries being loaded)`);
+        if (!entry) throw new Error(`Unknown library dependency "${name}" (not in the set of entries being loaded)`);
         visiting.add(name);
         for (const [depName, dep] of Object.entries(entry.manifest.dependsOn ?? {})) {
-            if (dep.type !== "plugin") continue;
+            if (dep.type !== "library") continue;
             const depEntry = byName.get(depName);
             if (depEntry && depEntry.manifest.kind === "mod") {
-                throw new Error(`"${name}" depends on "${depName}" as a plugin, but "${depName}" is a mod - mods never provide an API`);
+                throw new Error(`"${name}" depends on "${depName}" as a library, but "${depName}" is a mod - mods never provide an API`);
             }
             visit(depName);
         }
@@ -37,25 +37,25 @@ function topoSort(entries) {
     for (const entry of entries) visit(entry.manifest.name);
 
     // Mods never `provides` anything and always load last, after every
-    // plugin - a mod's own dependsOn.plugin entries are already satisfied
-    // by this point since plugins never depend on mods (the manifest
-    // "kind" split makes that direction impossible to declare).
-    const plugins = order.filter(e => e.manifest.kind !== "mod");
+    // library - a mod's own dependsOn.library entries are already
+    // satisfied by this point since libraries never depend on mods (the
+    // manifest "kind" split makes that direction impossible to declare).
+    const libraries = order.filter(e => e.manifest.kind !== "mod");
     const mods = order.filter(e => e.manifest.kind === "mod");
-    return [...plugins, ...mods];
+    return [...libraries, ...mods];
 }
 
 /**
- * Loads a fixed set of plugin/mod entries against a fresh kernel. A
+ * Loads a fixed set of library/mod entries against a fresh kernel. A
  * `register(kernel, ctx)` that throws fails the WHOLE load loudly (a
  * load-time contract violation) - this is deliberately not caught, unlike
  * the per-invocation try/catch inside createRegistry(). Individual hook
- * *invocations* at runtime stay soft; plugin *loading* does not.
+ * *invocations* at runtime stay soft; library *loading* does not.
  *
  * @param {Array<{manifest: object, register: Function}>} entries
  * @returns {{ kernel, exportsByName: Map<string, any> }}
  */
-function loadPlugins(entries) {
+function loadLibraries(entries) {
     const kernel = createKernel();
     const sorted = topoSort(entries);
     const exportsByName = new Map();
@@ -63,7 +63,7 @@ function loadPlugins(entries) {
     for (const { manifest, register } of sorted) {
         const dependencies = {};
         for (const [depName, dep] of Object.entries(manifest.dependsOn ?? {})) {
-            if (dep.type === "plugin") dependencies[depName] = exportsByName.get(depName);
+            if (dep.type === "library") dependencies[depName] = exportsByName.get(depName);
         }
         const ctx = { manifest, dependencies };
         const result = register(kernel, ctx);
@@ -73,4 +73,4 @@ function loadPlugins(entries) {
     return { kernel, exportsByName };
 }
 
-module.exports = { topoSort, loadPlugins };
+module.exports = { topoSort, loadLibraries };

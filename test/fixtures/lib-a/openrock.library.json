@@ -1,7 +1,7 @@
 {
   "openrockVersion": 1,
-  "kind": "plugin",
-  "name": "plugin-a",
+  "kind": "library",
+  "name": "lib-a",
   "version": "1.0.0",
   "entry": "register.js",
   "provides": { "api": "register.js", "hookNamespaces": ["greeting"] }

@@ -1,5 +1,5 @@
-// Dummy plugin A - registers one "greeting" hook and exports a tiny API.
-// Load order and ctx.dependencies wiring for plugin-b (which depends on
+// Dummy library A - registers one "greeting" hook and exports a tiny API.
+// Load order and ctx.dependencies wiring for lib-b (which depends on
 // this) are asserted in test/kernel.test.js.
 "use strict";
 

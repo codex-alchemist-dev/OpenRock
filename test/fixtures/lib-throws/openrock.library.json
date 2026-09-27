@@ -1,7 +1,7 @@
 {
   "openrockVersion": 1,
-  "kind": "plugin",
-  "name": "plugin-throws",
+  "kind": "library",
+  "name": "lib-throws",
   "version": "1.0.0",
   "entry": "register.js",
   "provides": { "api": "register.js" }

@@ -1,4 +1,4 @@
-// OpenRock's kernel - the registry core every plugin/mod registers against.
+// OpenRock's kernel - the registry core every library/mod registers against.
 // Generalizes the Map + register() + safe-default + try/catch-and-warn
 // pattern already proven twice in OpenChara (hooks.js, conditions.js).
 // See "OpenRock Mod Packager — Phased Implementation Plan", OR-Phase 3, in
@@ -29,9 +29,9 @@ function createRegistry(name, { validate } = {}) {
 }
 
 // The kernel is just a lazily-created set of named registries, shared by
-// every plugin loaded into one process/build. `kernel.hooks`,
+// every library loaded into one process/build. `kernel.hooks`,
 // `kernel.conditions`, `kernel.mclite` etc. are created on first access by
-// whichever plugin asks for them first - a plugin never needs to declare
+// whichever library asks for them first - a library never needs to declare
 // a registry before using it, matching how hooks.js/conditions.js today
 // just exist as already-created singletons.
 function createKernel() {
