@@ -20,12 +20,21 @@
 // against OpenRock's own bundled libs/* by name automatically
 // (resolveBundledLibraryDirs); its "submodule"-type dependencies resolve
 // against <modDir>/vendor/ by convention.
+//
+// `dev` also accepts a MODS FOLDER (a directory whose immediate
+// subdirectories are each their own mod, rather than a mod itself) -
+// OR-Track F1's multi-mod dev mode: every discovered mod gets its own
+// independent watch+debounce+redeploy loop (one mod's rebuild never blocks
+// another's), and resolveManifestSet() runs across the WHOLE discovered
+// set once at startup so a `breaks` conflict between two mods in the
+// folder is caught before either deploys.
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { buildMod, resolveBundledLibraryDirs, writeTree } = require("../src/buildPipeline.js");
+const { buildMod, resolveBundledLibraryDirs, discoverMods, writeTree } = require("../src/buildPipeline.js");
+const { resolveManifestSet } = require("../src/resolver.js");
 const { zip } = require("../src/zip.js");
 const { loadManifestFile } = require("../src/manifest.js");
 
@@ -90,33 +99,64 @@ function cmdExport(modDir) {
     console.log(`[${stamp()}] Exported ${file} (${(fs.statSync(file).size / 1024 / 1024).toFixed(1)} MB)`);
 }
 
-function cmdDev(modDir) {
-    let manifest;
-    try { manifest = cmdDeploy(modDir).r.manifest; }
-    catch (e) { console.error(`[${stamp()}] ${e.message}`); manifest = loadManifestFile(modDir).manifest; }
-
-    const watched = [modDir]; // includes vendor/ - a vendored dependency's own change should redeploy too
+// One independent watch+debounce+redeploy loop for a single mod directory
+// - shared by both dev modes below, so a mods/-folder mod behaves exactly
+// like a standalone one, just with its own isolated watcher.
+function watchAndDeploy(modDir, { onError = e => console.error(`[${stamp()}] Not deployed - ${e.message}`) } = {}) {
     let timer = null, running = false, again = false;
     const run = () => {
         if (running) { again = true; return; }
         running = true;
         try { cmdDeploy(modDir, true); }
-        catch (e) { console.error(`[${stamp()}] Not deployed - ${e.message}`); }
+        catch (e) { onError(e); }
         running = false;
         if (again) { again = false; schedule(); }
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
+    fs.watch(modDir, { recursive: true }, (evt, file) => {
+        if (file && /(^|[\\/])(\.git|node_modules|build|dist)([\\/]|$)/.test(file)) return;
+        schedule();
+    });
+    setInterval(schedule, 30000); // safety net - some editors/sync tools miss real fs.watch events
+    return schedule;
+}
 
-    for (const dir of watched) {
-        fs.watch(dir, { recursive: true }, (evt, file) => {
-            if (file && /(^|[\\/])(\.git|node_modules|build|dist)([\\/]|$)/.test(file)) return;
-            schedule();
-        });
+function cmdDevSingle(modDir) {
+    // A broken FIRST deploy is reported but not fatal - the watcher still
+    // starts, so fixing the problem and saving triggers a real redeploy
+    // without needing to restart `dev`. loadManifestFile() alone still
+    // throws (and correctly aborts `dev` entirely) if even the manifest
+    // itself is unreadable - there's nothing to watch without that.
+    loadManifestFile(modDir);
+    try { cmdDeploy(modDir); }
+    catch (e) { console.error(`[${stamp()}] ${e.message}`); }
+    watchAndDeploy(modDir);
+    console.log(`[${stamp()}] Watching:\n  ${modDir}\nChanges redeploy automatically. After a script change use /reload in-game; new entities/items/textures need a world rejoin. Ctrl+C to stop.`);
+}
+
+// OR-Track F1: every immediate subdirectory of `modsDir` with its own
+// openrock.mod.json gets its own independent watch loop - one mod's
+// rebuild never blocks or fails another's. resolveManifestSet() runs once
+// across the WHOLE discovered set up front so a cross-mod `breaks`
+// conflict is caught before anything deploys, not discovered piecemeal
+// later.
+function cmdDevMulti(modsDir) {
+    const found = discoverMods(modsDir);
+    if (found.length === 0) throw new Error(`No mods found in ${modsDir} (each subdirectory needs its own openrock.mod.json)`);
+    resolveManifestSet(found); // throws loudly on a cross-mod "breaks" conflict - deliberately not caught
+
+    for (const { dir } of found) {
+        try { cmdDeploy(dir); }
+        catch (e) { console.error(`[${stamp()}] ${path.basename(dir)}: ${e.message}`); }
+        watchAndDeploy(dir, { onError: e => console.error(`[${stamp()}] ${path.basename(dir)}: not deployed - ${e.message}`) });
     }
-    // Safety net: some editors/sync tools don't fire watch events reliably;
-    // a periodic no-op-if-unchanged deploy catches anything missed.
-    setInterval(schedule, 30000);
-    console.log(`[${stamp()}] Watching:\n  ${watched.join("\n  ")}\nChanges redeploy automatically. After a script change use /reload in-game; new entities/items/textures need a world rejoin. Ctrl+C to stop.`);
+    console.log(`[${stamp()}] Watching ${found.length} mod(s) in ${modsDir}:\n  ${found.map(f => f.manifest.name).join("\n  ")}\nEach mod redeploys independently on its own changes. Ctrl+C to stop.`);
+}
+
+function cmdDev(dir) {
+    let isSingleMod = false;
+    try { isSingleMod = loadManifestFile(dir).manifest.kind === "mod"; } catch { /* not a mod dir itself - try treating it as a mods/ folder */ }
+    return isSingleMod ? cmdDevSingle(dir) : cmdDevMulti(dir);
 }
 
 function logDir() {

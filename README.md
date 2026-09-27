@@ -4,8 +4,9 @@ An open-source library system for Minecraft Bedrock addon development.
 Plain JS/Node modules + a manifest.json (no custom DSL) for libraries and
 mods.
 
-**Status: OR-Phase 0-4, OR-Track A, OR-Track B, and OR-Track F0 (the real
-CLI) are all done. Nothing wired to a real addon yet.** `OpenChara`/`Claude
+**Status: OR-Phase 0-4, OR-Track A, OR-Track B, and OR-Track F (F0 the real
+CLI, F1 multi-mod dev mode) are all done. Nothing wired to a real addon
+yet.** `OpenChara`/`Claude
 Waifus` keep building via `node tools/openchara.js <cmd>` exactly as
 before - this repo has zero effect on that workflow until OR-Track J's
 actual, deliberate cutover.
@@ -257,6 +258,24 @@ Tested against dummy fixture mods/libraries only
 (`test/fixtures/build-lib`, `build-mod`) and via real child-process CLI
 invocations producing a genuine `.mcaddon` ZIP - never against real Claude
 Waifus, so none of OR-Track F0 carries cutover risk.
+
+### Multi-mod dev mode (OR-Track F1)
+
+`openrock dev` accepts either a single mod directory (the behavior above)
+**or a mods folder** - a directory whose immediate subdirectories are each
+their own mod (`discoverMods()` in `buildPipeline.js` tells them apart:
+does the path itself have an `openrock.mod.json`, or do its children?).
+In multi-mod mode:
+
+- Every discovered mod gets its **own independent** watch+debounce+
+  redeploy loop - one mod's rebuild failing or being slow never blocks or
+  breaks another's.
+- `resolver.js`'s `resolveManifestSet()` runs once across the **whole**
+  discovered set before anything deploys, so a `breaks` conflict between
+  two mods in the same folder is caught immediately, not discovered
+  piecemeal later (verified with a real fixture: `mod-b` declaring
+  `breaks: [{name: "mod-a"}]` makes `dev` refuse to start at all,
+  end to end through a real CLI invocation).
 
 ## Submodule workflow
 

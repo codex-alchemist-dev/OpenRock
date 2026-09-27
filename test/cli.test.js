@@ -94,6 +94,14 @@ test("openrock deploy: writes into OPENROCK_COM_MOJANG's development pack folder
     assert.ok(fs.existsSync(path.join(fakeComMojang, "development_resource_packs", "CLI Test R", "manifest.json")));
 });
 
+test("openrock dev (multi-mod): a cross-mod breaks conflict is caught before anything deploys", () => {
+    const modsDir = path.join(__dirname, "fixtures", "mods-dir"); // mod-b declares breaks: [{name: "mod-a"}]
+    let threw = false;
+    try { run(["dev", modsDir]); }
+    catch (e) { threw = true; assert.match(e.stderr ?? e.message, /"mod-b" breaks "mod-a"/); }
+    assert.strictEqual(threw, true);
+});
+
 test("openrock build <nonexistent dir>: fails with a clear error, non-zero exit", () => {
     let threw = false;
     try { run(["build", path.join(os.tmpdir(), "definitely-does-not-exist-openrock-test")]); }

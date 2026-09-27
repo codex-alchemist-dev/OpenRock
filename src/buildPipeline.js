@@ -203,4 +203,25 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
     return { bp, rp, manifest: modManifest };
 }
 
-module.exports = { buildMod, collectEntries, resolveBundledLibraryDirs, writeTree };
+/**
+ * Enumerates every immediate subdirectory of `modsDir` with a valid
+ * `kind: "mod"` manifest (OR-Track F1's multi-mod dev mode). A subdirectory
+ * with no manifest, an invalid one, or a `kind: "library"` one is skipped
+ * silently - `modsDir` is expected to hold mod checkouts, not libraries.
+ * @returns {Array<{manifest: object, dir: string}>}
+ */
+function discoverMods(modsDir) {
+    if (!fs.existsSync(modsDir)) return [];
+    const out = [];
+    for (const entry of fs.readdirSync(modsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const dir = path.join(modsDir, entry.name);
+        try {
+            const loaded = loadManifestFile(dir);
+            if (loaded.manifest.kind === "mod") out.push(loaded);
+        } catch { /* not a valid package dir here - skip */ }
+    }
+    return out;
+}
+
+module.exports = { buildMod, collectEntries, resolveBundledLibraryDirs, discoverMods, writeTree };
