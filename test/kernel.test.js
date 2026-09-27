@@ -99,6 +99,46 @@ test("validateManifest: rejects a malformed dependsOn entry type", () => {
     assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "bogus" } } }), /type must be one of/);
 });
 
+// ---- validateManifest: OR-Track A1 fields ------------------------------
+
+test("validateManifest: rejects a non-semver manifest.version", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "not-a-version", entry: "x.js" }), /not a valid semver version/);
+});
+
+test("validateManifest: accepts a versionRange on a library dependency", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", versionRange: "^2.0.0" } } }));
+});
+
+test("validateManifest: rejects a versionRange on a submodule dependency", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "submodule", path: "vendor/y", versionRange: "^2.0.0" } } }), /only valid on a "library" dependency/);
+});
+
+test("validateManifest: rejects a malformed versionRange", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", versionRange: "^not-a-version" } } }), /not a valid semver range/);
+});
+
+test("validateManifest: accepts optional/soft booleans on a library dependency", () => {
+    assert.doesNotThrow(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", optional: true }, z: { type: "library", soft: true } } }));
+});
+
+test("validateManifest: rejects a non-boolean optional/soft flag", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", dependsOn: { y: { type: "library", optional: "yes" } } }), /optional must be a boolean/);
+});
+
+test("validateManifest: accepts breaks/conflicts/recommends/suggests arrays", () => {
+    assert.doesNotThrow(() => validateManifest({
+        openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js",
+        breaks: [{ name: "old-lib", versionRange: "<2.0.0" }],
+        conflicts: [{ name: "rival-lib" }],
+        recommends: [{ name: "nice-to-have" }],
+        suggests: [{ name: "maybe" }],
+    }));
+});
+
+test("validateManifest: rejects a breaks entry missing a name", () => {
+    assert.throws(() => validateManifest({ openrockVersion: 1, kind: "library", name: "x", version: "1.0.0", entry: "x.js", breaks: [{ versionRange: "^1.0.0" }] }), /\.name is required/);
+});
+
 // ---- resolveDependency -----------------------------------------------
 
 test("resolveDependency: resolves a submodule dependency to a vendorDir path", () => {

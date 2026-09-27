@@ -1,8 +1,11 @@
 // Topological library/mod loading, by dependsOn's "library"-type entries.
-// See "OpenRock Mod Packager — Phased Implementation Plan", OR-Phase 3.
+// See "OpenRock Mod Packager — Phased Implementation Plan", OR-Phase 3, and
+// "OpenRock Ecosystem Expansion Roadmap", OR-Track A3, in the project plan
+// document.
 "use strict";
 
 const { createKernel } = require("./kernel.js");
+const { resolveManifestSet } = require("./resolver.js");
 
 /**
  * @param {Array<{manifest: object, register: Function}>} entries
@@ -46,31 +49,41 @@ function topoSort(entries) {
 }
 
 /**
- * Loads a fixed set of library/mod entries against a fresh kernel. A
- * `register(kernel, ctx)` that throws fails the WHOLE load loudly (a
+ * Loads a fixed set of library/mod entries against a fresh kernel. Runs
+ * resolver.js's resolveManifestSet() first (OR-Track A3) - this is what
+ * evaluates versionRange/breaks/conflicts and drops absent optional/soft
+ * dependsOn edges before topoSort ever sees them, so topoSort's own
+ * "Unknown library dependency" check only ever fires for a genuinely
+ * required-but-missing dependency, never an intentionally-absent optional
+ * one.
+ *
+ * A `register(kernel, ctx)` that throws fails the WHOLE load loudly (a
  * load-time contract violation) - this is deliberately not caught, unlike
  * the per-invocation try/catch inside createRegistry(). Individual hook
  * *invocations* at runtime stay soft; library *loading* does not.
  *
  * @param {Array<{manifest: object, register: Function}>} entries
- * @returns {{ kernel, exportsByName: Map<string, any> }}
+ * @returns {{ kernel, exportsByName: Map<string, any>, warnings: string[] }}
  */
 function loadLibraries(entries) {
+    const { entries: resolved, warnings } = resolveManifestSet(entries);
     const kernel = createKernel();
-    const sorted = topoSort(entries);
+    const sorted = topoSort(resolved);
     const exportsByName = new Map();
 
     for (const { manifest, register } of sorted) {
         const dependencies = {};
         for (const [depName, dep] of Object.entries(manifest.dependsOn ?? {})) {
-            if (dep.type === "library") dependencies[depName] = exportsByName.get(depName);
+            // A "soft" dependency is load-order-only (OR-Track A1) - it
+            // never receives a ctx.dependencies entry, even when present.
+            if (dep.type === "library" && !dep.soft) dependencies[depName] = exportsByName.get(depName);
         }
         const ctx = { manifest, dependencies };
         const result = register(kernel, ctx);
         exportsByName.set(manifest.name, result?.api);
     }
 
-    return { kernel, exportsByName };
+    return { kernel, exportsByName, warnings };
 }
 
 module.exports = { topoSort, loadLibraries };

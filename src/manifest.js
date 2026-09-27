@@ -1,14 +1,19 @@
 // OpenRock manifest validation + dependency resolution. See "OpenRock Mod
-// Packager — Phased Implementation Plan", OR-Phase 3.1 in the project plan
-// document for the full manifest shape and worked examples (a real
-// library manifest for OpenChara, a real mod manifest translated field-for-
-// field from Claude Waifus's actual PATCHES/project.json).
+// Packager — Phased Implementation Plan", OR-Phase 3.1, and "OpenRock
+// Ecosystem Expansion Roadmap", OR-Track A1, in the project plan document
+// for the full manifest shape and worked examples (a real library manifest
+// for OpenChara, a real mod manifest translated field-for-field from
+// Claude Waifus's actual PATCHES/project.json).
 "use strict";
 
 const path = require("path");
+const semver = require("./semver.js");
 
 const VALID_KINDS = ["library", "mod"];
 const VALID_DEP_TYPES = ["submodule", "library"];
+// Modrinth's real dependency_type categories (required/optional/incompatible/
+// embedded), adapted to OpenRock's own vocabulary - see OR-Track A1.
+const RELATION_ARRAYS = ["breaks", "conflicts", "recommends", "suggests"];
 
 /**
  * Structural validation only - throws with a specific reason on the first
@@ -20,11 +25,46 @@ function validateManifest(manifest) {
     if (!VALID_KINDS.includes(manifest.kind)) throw new Error(`manifest.kind must be one of ${VALID_KINDS.join("/")}, got ${JSON.stringify(manifest.kind)}`);
     if (typeof manifest.name !== "string" || !manifest.name) throw new Error("manifest.name is required");
     if (typeof manifest.version !== "string" || !manifest.version) throw new Error("manifest.version is required");
+    if (!semver.isValidVersion(manifest.version)) throw new Error(`manifest.version "${manifest.version}" is not a valid semver version (major.minor.patch)`);
 
     for (const [depName, dep] of Object.entries(manifest.dependsOn ?? {})) {
         if (!dep || typeof dep !== "object") throw new Error(`manifest.dependsOn.${depName} must be an object`);
         if (!VALID_DEP_TYPES.includes(dep.type)) throw new Error(`manifest.dependsOn.${depName}.type must be one of ${VALID_DEP_TYPES.join("/")}, got ${JSON.stringify(dep.type)}`);
         if (dep.type === "submodule" && typeof dep.path !== "string") throw new Error(`manifest.dependsOn.${depName}: type "submodule" requires a "path"`);
+        // versionRange (A1): an npm-style range, only meaningful for a
+        // "library" dependency (a submodule dependency is pinned by git
+        // commit, not a version string at all). Absent means "any version".
+        if (dep.versionRange !== undefined) {
+            if (dep.type !== "library") throw new Error(`manifest.dependsOn.${depName}: "versionRange" is only valid on a "library" dependency`);
+            if (typeof dep.versionRange !== "string" || !semver.isValidRange(dep.versionRange)) throw new Error(`manifest.dependsOn.${depName}.versionRange "${dep.versionRange}" is not a valid semver range`);
+        }
+        // optional (A1): orders if present, never fails loadLibraries if the
+        // target is absent from the load set - ctx.dependencies[name] is
+        // then explicitly undefined rather than the load failing.
+        if (dep.optional !== undefined && typeof dep.optional !== "boolean") throw new Error(`manifest.dependsOn.${depName}.optional must be a boolean`);
+        // soft (A1): load-order-only - doesn't even require the target to
+        // `provides.api`; a soft dependent never receives ctx.dependencies
+        // for it, only an ordering guarantee.
+        if (dep.soft !== undefined && typeof dep.soft !== "boolean") throw new Error(`manifest.dependsOn.${depName}.soft must be a boolean`);
+    }
+
+    // breaks/conflicts/recommends/suggests (A1): each an array of
+    // {name, versionRange?} entries, matching Modrinth's real
+    // dependency_type categories (required/optional/incompatible/embedded)
+    // adapted to OpenRock's vocabulary. breaks = hard fail at resolve time,
+    // conflicts = soft warning, recommends/suggests = advisory only, never
+    // enforced by the resolver itself.
+    for (const arrayName of RELATION_ARRAYS) {
+        const entries = manifest[arrayName];
+        if (entries === undefined) continue;
+        if (!Array.isArray(entries)) throw new Error(`manifest.${arrayName} must be an array`);
+        entries.forEach((entry, i) => {
+            if (!entry || typeof entry !== "object") throw new Error(`manifest.${arrayName}[${i}] must be an object`);
+            if (typeof entry.name !== "string" || !entry.name) throw new Error(`manifest.${arrayName}[${i}].name is required`);
+            if (entry.versionRange !== undefined && (typeof entry.versionRange !== "string" || !semver.isValidRange(entry.versionRange))) {
+                throw new Error(`manifest.${arrayName}[${i}].versionRange "${entry.versionRange}" is not a valid semver range`);
+            }
+        });
     }
 
     if (manifest.kind === "library") {
@@ -64,4 +104,4 @@ function resolveDependency(manifest, depName, { vendorDir, loadedLibraries } = {
     throw new Error(`resolveDependency("${depName}"): unknown dependency type "${dep.type}"`);
 }
 
-module.exports = { validateManifest, resolveDependency, VALID_KINDS, VALID_DEP_TYPES };
+module.exports = { validateManifest, resolveDependency, VALID_KINDS, VALID_DEP_TYPES, RELATION_ARRAYS };
