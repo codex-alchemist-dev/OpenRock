@@ -6,6 +6,7 @@
 
 const { createKernel } = require("./kernel.js");
 const { resolveManifestSet } = require("./resolver.js");
+const { resolveDependency } = require("./manifest.js");
 
 /**
  * @param {Array<{manifest: object, register: Function}>} entries
@@ -62,10 +63,20 @@ function topoSort(entries) {
  * the per-invocation try/catch inside createRegistry(). Individual hook
  * *invocations* at runtime stay soft; library *loading* does not.
  *
+ * A `dependsOn` entry of type "submodule" is resolved and `require()`d
+ * here too (needs `vendorDir`), so `ctx.dependencies[depName]` is
+ * uniformly "the actual thing you'd use" regardless of whether a
+ * dependency came from another library's `provides.api` or a vendored
+ * submodule like MCLite - a consuming library's register() never has to
+ * know or care which kind of dependency it received.
+ *
  * @param {Array<{manifest: object, register: Function}>} entries
+ * @param {object} [opts]
+ * @param {string} [opts.vendorDir] - required only if some entry has a
+ *   "submodule"-type dependency.
  * @returns {{ kernel, exportsByName: Map<string, any>, warnings: string[] }}
  */
-function loadLibraries(entries) {
+function loadLibraries(entries, { vendorDir } = {}) {
     const { entries: resolved, warnings } = resolveManifestSet(entries);
     const kernel = createKernel();
     const sorted = topoSort(resolved);
@@ -76,7 +87,9 @@ function loadLibraries(entries) {
         for (const [depName, dep] of Object.entries(manifest.dependsOn ?? {})) {
             // A "soft" dependency is load-order-only (OR-Track A1) - it
             // never receives a ctx.dependencies entry, even when present.
-            if (dep.type === "library" && !dep.soft) dependencies[depName] = exportsByName.get(depName);
+            if (dep.soft) continue;
+            if (dep.type === "library") dependencies[depName] = exportsByName.get(depName);
+            else if (dep.type === "submodule") dependencies[depName] = require(resolveDependency(manifest, depName, { vendorDir }));
         }
         const ctx = { manifest, dependencies };
         const result = register(kernel, ctx);

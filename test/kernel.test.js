@@ -228,4 +228,14 @@ test("loadLibraries: mods always load last, after every library they depend on",
     assert.strictEqual(sawPluginALoaded, true, "expected lib-a's API to already be available when the mod's register() ran");
 });
 
+test("loadLibraries: a submodule dependency is resolved and require()'d into ctx.dependencies", () => {
+    let sawMclite;
+    const consumer = {
+        manifest: { openrockVersion: 1, kind: "library", name: "mclite-consumer", version: "1.0.0", entry: "x", dependsOn: { mclite: { type: "submodule", path: "vendor/mclite" } } },
+        register(kernel, ctx) { sawMclite = ctx.dependencies.mclite; return { api: {} }; },
+    };
+    loadLibraries([consumer], { vendorDir: path.join(__dirname, "..") });
+    assert.strictEqual(typeof sawMclite?.readRecord, "function", "expected the real vendored MCLite module, not just a path string");
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", with failures" : ""}`);
