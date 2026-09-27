@@ -1,0 +1,12 @@
+{
+  "name": "openrock",
+  "version": "0.1.0",
+  "description": "OpenRock Mod Packager: a plugin system for Minecraft Bedrock addon development. Absorbs MinUI and MClite as git submodules; OpenChara is its first plugin, Claude Waifus its first mod.",
+  "private": true,
+  "bin": {
+    "openrock": "bin/openrock.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
