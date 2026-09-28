@@ -53,7 +53,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { buildMod, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree } = require("../src/buildPipeline.js");
+const { buildMod, createIncrementalBuild, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree } = require("../src/buildPipeline.js");
 const { resolveManifestSet } = require("../src/resolver.js");
 const { zip } = require("../src/zip.js");
 const { loadManifestFile } = require("../src/manifest.js");
@@ -162,23 +162,72 @@ function cmdExport(modDir) {
 // One independent watch+debounce+redeploy loop for a single mod directory
 // - shared by both dev modes below, so a mods/-folder mod behaves exactly
 // like a standalone one, just with its own isolated watcher.
+//
+// OR-Track Q6, made real: ONE createIncrementalBuild() instance lives for
+// this watcher's entire lifetime. A real fs.watch event names the file
+// that changed - that path is queued and handed to `inc.rebuild(absPath)`
+// on the next debounced run, which re-renders ONLY the one real compile
+// unit that file belongs to (see buildPipeline.js's classifyChange()),
+// never a full buildMod() pass, unless the change can't be safely
+// attributed to one unit (inc.rebuild() itself falls back to a real full
+// rebuild in that case - this loop never has to guess). The 30s safety-net
+// tick (some editors/sync tools miss real fs.watch events entirely) is the
+// one deliberate exception: since we don't know what, if anything, was
+// missed, it forces one real FULL rebuild via inc.build() to self-heal -
+// correctness over speed for that one periodic case.
 function watchAndDeploy(modDir, { onError = e => console.error(`[${stamp()}] Not deployed - ${e.message}`) } = {}) {
+    const inc = createIncrementalBuild(modDir, buildOpts(modDir));
+    let pendingFiles = [];
+    let forceFull = false;
     let timer = null, running = false, again = false;
+
+    function deployResult(r) {
+        const root = comMojang();
+        const a = r.bp ? writeTree(r.bp, path.join(root, "development_behavior_packs", r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
+        const b = writeTree(r.rp, path.join(root, "development_resource_packs", r.manifest.packs.resource.folder));
+        return { r, changed: a.written + b.written + a.removed + b.removed };
+    }
+
     const run = () => {
         if (running) { again = true; return; }
         running = true;
-        try { cmdDeploy(modDir, true); }
-        catch (e) { onError(e); }
+        const files = pendingFiles;
+        pendingFiles = [];
+        const doFull = forceFull || files.length === 0;
+        forceFull = false;
+        try {
+            let r;
+            if (doFull) {
+                r = inc.build();
+            } else {
+                for (const f of files) r = inc.rebuild(f);
+            }
+            const { changed } = deployResult(r);
+            if (changed) console.log(`[${stamp()}] Deployed ${r.manifest.name}${inc.isFullBuild() ? "" : " (incremental)"}: real update.`);
+        } catch (e) { onError(e); }
         running = false;
         if (again) { again = false; schedule(); }
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
     fs.watch(modDir, { recursive: true }, (evt, file) => {
-        if (file && /(^|[\\/])(\.git|node_modules|build|dist)([\\/]|$)/.test(file)) return;
+        if (!file) { forceFull = true; schedule(); return; } // some platforms don't report a filename at all - can't classify it, so play it safe with a real full rebuild
+        if (/(^|[\\/])(\.git|node_modules|build|dist|\.(entity|manifest)-dsl-dist)([\\/]|$)/.test(file)) return;
+        pendingFiles.push(path.join(modDir, file));
         schedule();
     });
-    setInterval(schedule, 30000); // safety net - some editors/sync tools miss real fs.watch events
-    return schedule;
+    setInterval(() => { forceFull = true; schedule(); }, 30000); // safety net - see comment above
+    return {
+        schedule,
+        // The REAL initial deploy, using this SAME incremental builder
+        // instance's first .build() call - so `dev` never pays for a full
+        // build twice at startup (once here, once again on the first save).
+        deployInitial() {
+            const r = inc.build();
+            const { changed } = deployResult(r);
+            console.log(`[${stamp()}] Deployed ${r.manifest.name}: ${changed} file(s) updated.`);
+            return r;
+        },
+    };
 }
 
 function cmdDevSingle(modDir) {
@@ -188,10 +237,10 @@ function cmdDevSingle(modDir) {
     // throws (and correctly aborts `dev` entirely) if even the manifest
     // itself is unreadable - there's nothing to watch without that.
     loadManifestFile(modDir);
-    try { cmdDeploy(modDir); }
+    const watcher = watchAndDeploy(modDir);
+    try { watcher.deployInitial(); }
     catch (e) { console.error(`[${stamp()}] ${e.message}`); }
-    watchAndDeploy(modDir);
-    console.log(`[${stamp()}] Watching:\n  ${modDir}\nChanges redeploy automatically. After a script change use /reload in-game; new entities/items/textures need a world rejoin. Ctrl+C to stop.`);
+    console.log(`[${stamp()}] Watching:\n  ${modDir}\nChanges redeploy automatically (incrementally, where possible). After a script change use /reload in-game; new entities/items/textures need a world rejoin. Ctrl+C to stop.`);
 }
 
 // OR-Track F1: every immediate subdirectory of `modsDir` with its own
@@ -206,11 +255,11 @@ function cmdDevMulti(modsDir) {
     resolveManifestSet(found); // throws loudly on a cross-mod "breaks" conflict - deliberately not caught
 
     for (const { dir } of found) {
-        try { cmdDeploy(dir); }
+        const watcher = watchAndDeploy(dir, { onError: e => console.error(`[${stamp()}] ${path.basename(dir)}: not deployed - ${e.message}`) });
+        try { watcher.deployInitial(); }
         catch (e) { console.error(`[${stamp()}] ${path.basename(dir)}: ${e.message}`); }
-        watchAndDeploy(dir, { onError: e => console.error(`[${stamp()}] ${path.basename(dir)}: not deployed - ${e.message}`) });
     }
-    console.log(`[${stamp()}] Watching ${found.length} mod(s) in ${modsDir}:\n  ${found.map(f => f.manifest.name).join("\n  ")}\nEach mod redeploys independently on its own changes. Ctrl+C to stop.`);
+    console.log(`[${stamp()}] Watching ${found.length} mod(s) in ${modsDir}:\n  ${found.map(f => f.manifest.name).join("\n  ")}\nEach mod redeploys independently on its own changes (incrementally, where possible). Ctrl+C to stop.`);
 }
 
 function cmdDev(dir) {

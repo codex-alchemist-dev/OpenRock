@@ -10,8 +10,17 @@ const fs = require("fs");
 const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildEntity } = require("./entityBuilder.js");
+const { signatureForFiles, withCompileCache } = require("../devCache.js");
 
 const TEMPLATE_TSCONFIG = path.join(__dirname, "tsconfig.template.json");
+// This DSL's own shared runtime files - part of every compile's real
+// signature (a change here must invalidate every cached entity DSL
+// directory's output, not just the one currently being edited) and busted
+// from require.cache on every real recompile (OR-Track Q6's fix for
+// requireCompiled() only busting the ONE compiled file it loads, never its
+// transitive requires).
+const RUNTIME_FILES = [path.join(__dirname, "jsx-runtime.js"), path.join(__dirname, "components.js"), path.join(__dirname, "entityBuilder.js")];
+const compileCache = new Map(); // entityDslDir -> {signature, value: output}
 
 // Real behavior, confirmed (not assumed): without an explicit "rootDir",
 // tsc computes the common ancestor of EVERY file it processes - including
@@ -49,36 +58,42 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
     const sourceFiles = fs.readdirSync(entityDslDir).filter(f => /\.entity\.tsx?$/.test(f));
     if (sourceFiles.length === 0) return {};
 
-    const realOutDir = outDir ?? path.join(entityDslDir, ".entity-dsl-dist");
-    const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
-    const tsconfig = {
-        ...template,
-        compilerOptions: { ...template.compilerOptions, outDir: realOutDir },
-        include: sourceFiles,
-    };
-    const tsconfigPath = path.join(entityDslDir, "tsconfig.entity-dsl.json");
-    fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
-    try {
-        compileWithRealTsc(tsconfigPath, { cwd: entityDslDir });
-    } finally {
-        fs.rmSync(tsconfigPath, { force: true }); // a real, generated build artifact - never left behind as a stray file
-    }
+    const sourceAbsPaths = sourceFiles.map(f => path.join(entityDslDir, f));
+    const signature = signatureForFiles([...sourceAbsPaths, ...RUNTIME_FILES]);
+    const cacheKey = `${entityDslDir}::${outDir ?? ""}`; // outDir is part of the real cache identity - a different outDir needs a real recompile, never a stale cached path
 
-    const output = {};
-    for (const sourceFile of sourceFiles) {
-        const baseName = sourceFile.replace(/\.entity\.tsx?$/, "");
-        const compiledPath = findCompiledFile(realOutDir, `${baseName}.entity.js`);
-        if (!compiledPath) throw new Error(`entityCompiler: couldn't find compiled output for "${sourceFile}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
-        const mod = requireCompiled(compiledPath);
-        const entityNode = mod.default ?? mod;
-        if (!entityNode || entityNode.tag !== "Entity") {
-            throw new Error(`entityCompiler: "${sourceFile}" must default-export a real <Entity> node, got ${JSON.stringify(entityNode)}`);
+    return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
+        const realOutDir = outDir ?? path.join(entityDslDir, ".entity-dsl-dist");
+        const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
+        const tsconfig = {
+            ...template,
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir },
+            include: sourceFiles,
+        };
+        const tsconfigPath = path.join(entityDslDir, "tsconfig.entity-dsl.json");
+        fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
+        try {
+            compileWithRealTsc(tsconfigPath, { cwd: entityDslDir });
+        } finally {
+            fs.rmSync(tsconfigPath, { force: true }); // a real, generated build artifact - never left behind as a stray file
         }
-        const identifier = entityNode.attrs.identifier;
-        const shortName = identifier.includes(":") ? identifier.split(":")[1] : identifier;
-        output[`entities/${shortName}.json`] = buildEntity(entityNode);
-    }
-    return output;
+
+        const output = {};
+        for (const sourceFile of sourceFiles) {
+            const baseName = sourceFile.replace(/\.entity\.tsx?$/, "");
+            const compiledPath = findCompiledFile(realOutDir, `${baseName}.entity.js`);
+            if (!compiledPath) throw new Error(`entityCompiler: couldn't find compiled output for "${sourceFile}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
+            const mod = requireCompiled(compiledPath);
+            const entityNode = mod.default ?? mod;
+            if (!entityNode || entityNode.tag !== "Entity") {
+                throw new Error(`entityCompiler: "${sourceFile}" must default-export a real <Entity> node, got ${JSON.stringify(entityNode)}`);
+            }
+            const identifier = entityNode.attrs.identifier;
+            const shortName = identifier.includes(":") ? identifier.split(":")[1] : identifier;
+            output[`entities/${shortName}.json`] = buildEntity(entityNode);
+        }
+        return output;
+    });
 }
 
 module.exports = { compileEntityDsl };

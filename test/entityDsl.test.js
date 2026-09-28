@@ -74,4 +74,38 @@ test("compileEntityDsl: a mod with no entity DSL directory at all returns an emp
     assert.deepStrictEqual(compileEntityDsl(path.join(__dirname, "fixtures", "does-not-exist")), {});
 });
 
+test("compileEntityDsl (OR-Track Q6): an unchanged directory returns the SAME cached output object - real tsc is skipped, not just fast", () => {
+    const first = compileEntityDsl(FIXTURE_DIR);
+    const second = compileEntityDsl(FIXTURE_DIR);
+    assert.strictEqual(first, second, "a cache hit must return the exact cached object, proving compileEntityDsl() didn't recompile at all");
+});
+
+test("compileEntityDsl (OR-Track Q6): editing a real .entity.tsx file produces a genuinely fresh, different compile - the cache never serves stale output", () => {
+    // A real tsc constraint hit here (not hypothetical): an absolute-path
+    // import reaching outside the compiled program's own input files needs
+    // a real common ancestor for tsc's rootDir inference - os.tmpdir() (C:)
+    // vs. this repo (V:) are on different drives on Windows, giving tsc NO
+    // common subdirectory at all ("TS5009: Cannot find the common
+    // subdirectory path"). The real fix: put the scratch dir on the SAME
+    // drive as the repo, not the OS temp dir.
+    const workDir = fs.mkdtempSync(path.join(__dirname, "fixtures", "openrock-entitydsl-cache-test-"));
+    const src = fs.readFileSync(path.join(FIXTURE_DIR, "nav_test.entity.tsx"), "utf8");
+    const srcPath = path.join(workDir, "nav_test.entity.tsx");
+    // The fixture's relative imports ("../../../src/...") assume its real
+    // fixtures/entity-dsl-pilot/ location - rewrite to an absolute path for
+    // this test's own, differently-nested temp directory.
+    const absSrcDir = path.join(__dirname, "..", "src").split(path.sep).join("/");
+    fs.writeFileSync(srcPath, src.replace(/\.\.\/\.\.\/\.\.\/src/g, absSrcDir));
+
+    const before = compileEntityDsl(workDir);
+    assert.strictEqual(before["entities/nav_test.json"]["minecraft:entity"].components["minecraft:health"].value, 20);
+
+    fs.writeFileSync(srcPath, src.replace("<Health value={20} />", "<Health value={7} />"));
+    const after = compileEntityDsl(workDir);
+    assert.strictEqual(after["entities/nav_test.json"]["minecraft:entity"].components["minecraft:health"].value, 7, "a real source edit must be picked up, not masked by the cache");
+    assert.notStrictEqual(before, after);
+
+    fs.rmSync(workDir, { recursive: true, force: true });
+});
+
 console.log(`\n${passed} passed`);

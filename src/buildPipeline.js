@@ -39,6 +39,21 @@
 // etc.) gets surfaced to or consumed by in-game code is a different,
 // still-open question this file doesn't need to answer to do its own real
 // job (bundling manifest-declared in-game scripts) correctly.
+//
+// OR-Track Q6 (real incremental builds, not just a "recopy changed files"
+// diff): buildMod() itself is decomposed below into named, individually
+// callable pieces (renderEntryContent/renderManifestJson/renderScripts/
+// runEntityLints) instead of one monolithic function body. buildMod()
+// composes ALL of them in order, unchanged in behavior from before this
+// refactor - every existing caller keeps working exactly as it did.
+// createIncrementalBuild() (bottom of this file) is the NEW real consumer:
+// it keeps a persistent {bp, rp} Map pair across many calls, classifies a
+// changed file to the ONE package + ONE content mechanism (entityDsl,
+// scriptsDir, bpOverlayDir/rpOverlayDir, datagenEntry, manifestDsl) it
+// belongs to, and re-runs ONLY that one piece - never a full buildMod()
+// pass - unless the change can't be safely attributed to one known unit,
+// in which case it falls back to a real full rebuild (buildMod() itself),
+// exactly as the original Q6 design called for.
 "use strict";
 
 const fs = require("fs");
@@ -74,6 +89,8 @@ function isBuildablePackage(manifest) {
 function fill(text, vars) {
     return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
 }
+
+const put = (map, rel, data) => map.set(rel, Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
 
 /**
  * Walks `rootManifest`'s full dependency tree (submodule deps resolved via
@@ -175,36 +192,21 @@ function buildManifests(m) {
 }
 
 /**
- * Builds a mod, OR a hybrid library that declares its own `packs`
- * (OR-Track K: a shared runtime addon other packages depend on via
- * type:"library" for its register()-time API, but that's ALSO its own
- * independently-installable BP/RP pair - not duplicated into every
- * consuming mod's build). The function name stays `buildMod` for
- * continuity with existing callers; "is this buildable at all" is
- * `manifest.kind === "mod" || (kind === "library" && manifest.packs)`.
- *
- * @param {string} modDir - a directory containing openrock.mod.json or a
- *   openrock.library.json with its own "packs".
- * @param {object} [opts]
- * @param {string} [opts.vendorDir] - base directory "submodule"-type deps resolve against.
- * @param {Record<string,string>} [opts.libraryDirs] - name -> directory, for "library"-type deps.
- * @returns {{ bp: Map<string,Buffer>|null, rp: Map<string,Buffer>, manifest: object }}
- *   `bp` is `null` for a resource-pack-only package (OR-Track G,
- *   `manifest.packs.behavior === false`) - there is genuinely no behavior
- *   pack to write/deploy/export, not an empty one.
+ * The real, cheap "setup" phase - directory listing, manifest parsing,
+ * topo-sorting the dependency tree, resolving the esbuild alias map. None
+ * of this is expensive compilation (no tsc, no esbuild invocation happens
+ * here), so it's always safe and correct to recompute in full on every
+ * incremental pass too - it's what lets a NEWLY added file (e.g. a second
+ * *.entity.tsx dropped into an existing entityDsl dir) be discovered
+ * without needing its own special-cased "structural change" detection.
+ * @returns {{modManifest, dir, hasBehaviorPack, ordered, scriptEntries, resolveMap, rootEntry, datagenApi: () => object}}
  */
-function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
+function resolveBuildPlan(modDir, { vendorDir, libraryDirs = {} } = {}) {
     const { manifest: modManifest, dir } = loadManifestFile(modDir);
     if (!isBuildablePackage(modManifest)) throw new Error(`buildMod(): "${modDir}" has no buildable pack (kind "${modManifest.kind}" with no "packs" declared)`);
     const hasBehaviorPack = modManifest.packs.behavior !== false;
-
     const ordered = topoSort(collectEntries(modManifest, dir, { vendorDir, libraryDirs }));
 
-    // @openrock/datagen's real builder functions, resolved once (from
-    // whichever entry in `ordered` actually declares it - a package that
-    // wants datagen support depends on it for real, via a normal
-    // dependsOn entry, so it's already collected by the time this runs)
-    // and reused for every datagenEntry script below.
     let cachedDatagenApi;
     function datagenApi() {
         if (cachedDatagenApi) return cachedDatagenApi;
@@ -217,87 +219,167 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
         return cachedDatagenApi;
     }
 
-    const bp = hasBehaviorPack ? new Map() : null;
-    const rp = new Map();
-    const put = (map, rel, data) => map.set(rel, Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
-    // Shared by both real overlay files AND datagen output below - a JSON
-    // file at a MERGED_FILES path combines with whatever's already there
-    // (another package's own contribution to the same registry file)
-    // instead of one silently clobbering the other.
-    const putJson = (map, outRel, obj) => {
-        if (MERGED_FILES.has(outRel) && map.has(outRel)) {
-            obj = mergeRegistry(JSON.parse(map.get(outRel).toString("utf8")), obj);
+    const scriptEntries = ordered.filter(({ manifest }) => hasBehaviorPack && manifest.content?.scriptsDir);
+
+    let resolveMap = null;
+    let rootEntry = null;
+    if (hasBehaviorPack) {
+        resolveMap = new Map();
+        // OR-Track N: every collected package that declares a real
+        // `provides.api` (every kind:"library" entry already does, for the
+        // build-time kernel's own resolveDependency()) also gets a real
+        // esbuild `alias` entry pointing at that exact file.
+        for (const { manifest, dir: entryDir } of ordered) {
+            if (manifest.provides?.api) resolveMap.set(manifest.name, path.resolve(entryDir, manifest.provides.api));
         }
-        put(map, outRel, JSON.stringify(obj, null, 2) + "\n");
-    };
-    const scriptEntries = []; // [{packageName, files: ["./scripts/foo/x.js", ...]}], in dependency load order
-
-    for (const { manifest, dir: entryDir } of ordered) {
-        const vars = { ns: manifest.namespace ?? "" };
-        const content = manifest.content ?? {};
-
-        for (const [field, map] of [["bpOverlayDir", bp], ["rpOverlayDir", rp]]) {
-            if (!map) continue; // no behavior pack being built at all - bpOverlayDir is moot
-            const srcDir = content[field];
-            if (!srcDir) continue;
-            const abs = path.join(entryDir, srcDir);
-            for (const rel of walk(abs)) {
-                const raw = fs.readFileSync(path.join(abs, rel));
-                const outRel = fill(rel, vars);
-                const data = TEXT_EXT.has(path.extname(rel)) ? fill(raw.toString("utf8"), vars) : raw;
-                if (MERGED_FILES.has(outRel) && map.has(outRel)) {
-                    const base = JSON.parse(map.get(outRel).toString("utf8"));
-                    const add = JSON.parse(typeof data === "string" ? data : data.toString("utf8"));
-                    put(map, outRel, JSON.stringify(mergeRegistry(base, add), null, 2) + "\n");
-                } else {
-                    put(map, outRel, data);
-                }
-            }
+        // A real content.scriptsDir entry overrides the provides.api alias
+        // above for its own package name - resolved second, deliberately.
+        for (const { manifest, dir: entryDir } of scriptEntries) {
+            const entryFile = resolveScriptEntry(manifest, entryDir);
+            if (entryFile) resolveMap.set(manifest.name, entryFile);
         }
-
-        // content.datagenEntry (OR-Track B2, made real): a build-time-only
-        // Node script, executed HERE (real require(), real JS execution -
-        // this is the whole point, generating data from typed calls
-        // instead of hand-writing JSON), producing { bp: {relPath: obj},
-        // rp: {relPath: obj} } merged into the pack the same way real
-        // overlay files are. Never bundled into the in-game scripts -
-        // that's content.scriptsDir's separate, real-esbuild-bundled job.
-        if (content.datagenEntry) {
-            const entryAbs = path.resolve(entryDir, content.datagenEntry);
-            if (!fs.existsSync(entryAbs)) throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" doesn't exist`);
-            let generate;
-            try { generate = require(entryAbs); } catch (err) { throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" failed to load: ${err.message}`); }
-            if (typeof generate !== "function") throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" must export a function (datagen) => ({ bp, rp })`);
-            const result = generate(datagenApi()) ?? {};
-            for (const [side, map] of [["bp", bp], ["rp", rp]]) {
-                if (!result[side]) continue;
-                if (!map) throw new Error(`"${manifest.name}": content.datagenEntry produced "${side}" output, but this package has no ${side === "bp" ? "behavior" : "resource"} pack`);
-                for (const [outRel, obj] of Object.entries(result[side])) putJson(map, fill(outRel, vars), obj);
-            }
-        }
-
-        // content.entityDsl (OR-Track M, made real): a directory of real
-        // *.entity.tsx files, compiled via src/entityDsl/entityCompiler.js
-        // (real tsc + the real EntityBuilder emission backend) into real
-        // Bedrock entity JSON, merged into the pack the same way
-        // datagenEntry's output is - the DSL replacement for hand-writing
-        // entities/*.json directly under bpOverlayDir.
-        if (hasBehaviorPack && content.entityDsl) {
-            const entityDslAbs = path.resolve(entryDir, content.entityDsl);
-            const entityOutput = compileEntityDsl(entityDslAbs);
-            for (const [outRel, doc] of Object.entries(entityOutput)) putJson(bp, fill(outRel, vars), doc);
-        }
-
-        if (hasBehaviorPack && content.scriptsDir) scriptEntries.push({ manifest, dir: entryDir });
+        rootEntry = resolveMap.get(modManifest.name) ?? null;
     }
 
-    // OR-Track M3 (made real): the entity DSL linter, run over EVERY real
-    // entity doc this build actually produced - both DSL-compiled and any
-    // hand-authored overlay JSON that reached bp/rp through
-    // bpOverlayDir/rpOverlayDir, since a lint pass here catches the failure
-    // class regardless of which authoring path produced the bad JSON. A
-    // parse failure on a non-conforming file is skipped, not fatal - lint
-    // targets real entity documents, not "every JSON file happens to be one".
+    return { modManifest, dir, hasBehaviorPack, ordered, scriptEntries, resolveMap, rootEntry, datagenApi };
+}
+
+/**
+ * Shared by both real overlay files AND datagen output - a JSON file at a
+ * MERGED_FILES path combines with whatever's already there (another
+ * package's own contribution to the same registry file) instead of one
+ * silently clobbering the other.
+ */
+function putJson(map, outRel, obj) {
+    if (MERGED_FILES.has(outRel) && map.has(outRel)) {
+        obj = mergeRegistry(JSON.parse(map.get(outRel).toString("utf8")), obj);
+    }
+    put(map, outRel, JSON.stringify(obj, null, 2) + "\n");
+}
+
+/**
+ * Renders ONE package entry's own bpOverlayDir/rpOverlayDir/datagenEntry/
+ * entityDsl content into `{bp, rp}` - the one real "compile unit" per
+ * package this pipeline knows about (scripts are handled separately by
+ * renderScripts() below, since script bundling spans the WHOLE dependency
+ * graph, not one package in isolation). Used both by buildMod()'s full
+ * assembly (called once per entry, in order) and by
+ * createIncrementalBuild()'s rebuild() (called for just the one entry that
+ * owns a changed file).
+ */
+function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi) {
+    const vars = { ns: manifest.namespace ?? "" };
+    const content = manifest.content ?? {};
+
+    for (const [field, map] of [["bpOverlayDir", bp], ["rpOverlayDir", rp]]) {
+        if (!map) continue; // no behavior pack being built at all - bpOverlayDir is moot
+        const srcDir = content[field];
+        if (!srcDir) continue;
+        const abs = path.join(entryDir, srcDir);
+        for (const rel of walk(abs)) {
+            const raw = fs.readFileSync(path.join(abs, rel));
+            const outRel = fill(rel, vars);
+            const data = TEXT_EXT.has(path.extname(rel)) ? fill(raw.toString("utf8"), vars) : raw;
+            if (MERGED_FILES.has(outRel) && map.has(outRel)) {
+                const base = JSON.parse(map.get(outRel).toString("utf8"));
+                const add = JSON.parse(typeof data === "string" ? data : data.toString("utf8"));
+                put(map, outRel, JSON.stringify(mergeRegistry(base, add), null, 2) + "\n");
+            } else {
+                put(map, outRel, data);
+            }
+        }
+    }
+
+    // content.datagenEntry (OR-Track B2, made real): a build-time-only Node
+    // script, executed HERE (real require(), real JS execution), producing
+    // { bp: {relPath: obj}, rp: {relPath: obj} } merged into the pack the
+    // same way real overlay files are.
+    if (content.datagenEntry) {
+        const entryAbs = path.resolve(entryDir, content.datagenEntry);
+        if (!fs.existsSync(entryAbs)) throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" doesn't exist`);
+        let generate;
+        try { generate = require(entryAbs); } catch (err) { throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" failed to load: ${err.message}`); }
+        if (typeof generate !== "function") throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" must export a function (datagen) => ({ bp, rp })`);
+        const result = generate(datagenApi()) ?? {};
+        for (const [side, map] of [["bp", bp], ["rp", rp]]) {
+            if (!result[side]) continue;
+            if (!map) throw new Error(`"${manifest.name}": content.datagenEntry produced "${side}" output, but this package has no ${side === "bp" ? "behavior" : "resource"} pack`);
+            for (const [outRel, obj] of Object.entries(result[side])) putJson(map, fill(outRel, vars), obj);
+        }
+    }
+
+    // content.entityDsl (OR-Track M, made real): a directory of real
+    // *.entity.tsx files, compiled via src/entityDsl/entityCompiler.js into
+    // real Bedrock entity JSON, merged into the pack the same way
+    // datagenEntry's output is.
+    if (bp && content.entityDsl) {
+        const entityDslAbs = path.resolve(entryDir, content.entityDsl);
+        const entityOutput = compileEntityDsl(entityDslAbs);
+        for (const [outRel, doc] of Object.entries(entityOutput)) putJson(bp, fill(outRel, vars), doc);
+    }
+}
+
+/**
+ * Renders the real, generated bp/rp manifest.json - buildManifests()'s own
+ * output, extended/overridden by the root manifest's real manifest DSL
+ * file (OR-Track O), if any. Cheap enough (no tsc unless the manifest DSL
+ * file itself changed - and even then, manifestDsl's own Q6 cache skips it
+ * when unchanged) to always re-run in full on every build, incremental or not.
+ */
+function renderManifestJson(plan, { bp, rp }) {
+    const { modManifest, dir, hasBehaviorPack } = plan;
+    const built = buildManifests(modManifest);
+
+    const rootManifestDsl = modManifest.content?.manifestDsl;
+    if (rootManifestDsl) {
+        const manifestDslAbs = path.resolve(dir, rootManifestDsl);
+        const manifestOutput = compileManifestDsl(manifestDslAbs);
+        if (manifestOutput) {
+            if (built.bp) built.bp = mergeManifestDoc(built.bp, manifestOutput.bp);
+            else if (manifestOutput.bp) throw new Error(`"${modManifest.name}": manifest DSL declares a <Behavior> pack, but this mod has no real behavior pack (packs.behavior === false)`);
+            built.rp = mergeManifestDoc(built.rp, manifestOutput.rp);
+        }
+    }
+
+    if (hasBehaviorPack) put(bp, "manifest.json", JSON.stringify(built.bp, null, 2) + "\n");
+    put(rp, "manifest.json", JSON.stringify(built.rp, null, 2) + "\n");
+}
+
+/**
+ * Real ES-module bundling of the root mod's own script entry (via
+ * bundleScripts()) plus the real, compile-time script lints (OR-Track M3).
+ * Spans the WHOLE resolved dependency graph (cross-package bare-specifier
+ * resolution), so unlike renderEntryContent() this is never scoped to one
+ * package - any scriptsDir change anywhere in the tree re-runs this in full.
+ * @returns {string[]} lint issues found against the freshly bundled output.
+ */
+function renderScripts(plan, bp) {
+    const { modManifest, rootEntry } = plan;
+    const lintIssues = [];
+    if (rootEntry) {
+        const { js, map } = bundleScripts(modManifest, rootEntry, plan.resolveMap);
+        lintIssues.push(...checkScriptModulesCompleteness(js, modManifest.engine?.scriptModules, modManifest.name));
+        lintIssues.push(...scanEarlyExecutionCalls(js, modManifest.name));
+        put(bp, "scripts/main.js", js);
+        if (map) put(bp, "scripts/main.js.map", map);
+        else bp.delete("scripts/main.js.map");
+    } else {
+        put(bp, "scripts/main.js", "// GENERATED by OpenRock build - this mod declares no script entry.\n");
+    }
+    return lintIssues;
+}
+
+/**
+ * OR-Track M3 (made real): the entity DSL linter, run over EVERY real
+ * entity doc currently in `{bp, rp}` - both DSL-compiled and any
+ * hand-authored overlay JSON that reached bp/rp through
+ * bpOverlayDir/rpOverlayDir, since a lint pass here catches the failure
+ * class regardless of which authoring path produced the bad JSON. Cheap
+ * (a JSON walk, no process spawn) - always safe to re-run in full after
+ * ANY incremental change, so lint coverage never silently narrows just
+ * because a rebuild was scoped to one package.
+ */
+function runEntityLints({ bp, rp }) {
     const lintIssues = [];
     if (bp) {
         for (const [rel, buf] of bp) {
@@ -318,98 +400,55 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
     }
     for (const [rel, doc] of clientEntityDocs) {
         lintIssues.push(...lintClientEntityDoc(doc, rel));
-        // Checked against every render_controllers doc this build produced,
-        // not just ones this specific entity's description.render_controllers
-        // names - a real per-controller-name cross-reference would need
-        // parsing that list against each rcDoc's own top-level key names,
-        // which isn't a stable enough convention across real Bedrock mods to
-        // rely on. Checking against the whole set still catches the real
-        // failure class (an undeclared short-name reference) with zero false
-        // negatives, at the cost of a rare false positive if a build
-        // genuinely ships two unrelated entities' render controllers
-        // side by side with colliding short-names - an edge case worth
-        // tightening later, not blocking this real check now.
         lintIssues.push(...lintRenderControllerReferences(doc, rcDocs, rel));
     }
+    return lintIssues;
+}
 
-    const built = buildManifests(modManifest);
-
-    // OR-Track O (made real): the root mod's own manifest DSL file (if any)
-    // compiles to real bp/rp manifest.json override documents, merged onto
-    // buildManifests()'s own generated output - only the ROOT manifest's
-    // content.manifestDsl is honored (a dependency library doesn't
-    // contribute to the mod's own single manifest.json), matching how
-    // scripts/entities work per-package but a manifest is one-per-pack.
-    const rootManifestDsl = modManifest.content?.manifestDsl;
-    if (rootManifestDsl) {
-        const manifestDslAbs = path.resolve(dir, rootManifestDsl);
-        const manifestOutput = compileManifestDsl(manifestDslAbs);
-        if (manifestOutput) {
-            if (built.bp) built.bp = mergeManifestDoc(built.bp, manifestOutput.bp);
-            else if (manifestOutput.bp) throw new Error(`"${modManifest.name}": manifest DSL declares a <Behavior> pack, but this mod has no real behavior pack (packs.behavior === false)`);
-            built.rp = mergeManifestDoc(built.rp, manifestOutput.rp);
-        }
-    }
-
-    if (hasBehaviorPack) {
-        const resolveMap = new Map();
-        // OR-Track N: every collected package that declares a real
-        // `provides.api` (every kind:"library" entry already does, for the
-        // build-time kernel's own resolveDependency()) also gets a real
-        // esbuild `alias` entry pointing at that exact file - the same file
-        // path already used for the build-time kernel/datagenApi()
-        // resolution, reused here rather than inventing a second concept.
-        // This is what makes `import { navigateToCoordinate } from
-        // "@openrock/pathfinding"` resolve for real from inside a mod's own
-        // script: esbuild bundles libs/pathfinding/src/register.js (a real
-        // CommonJS file with real top-level named exports, per OR-Track N's
-        // hoist) and exposes those exports via its standard CJS->ESM
-        // interop. A library that was never hoisted (still only exports its
-        // kernel-shaped `register` function) still gets an alias here - if
-        // a mod's script tries to import a named export that doesn't
-        // actually exist on that file, esbuild fails with a clear
-        // resolution error, which is the CORRECT outcome (that library
-        // genuinely isn't meant to be imported that way), not a silent gap.
-        for (const { manifest, dir: entryDir } of ordered) {
-            if (manifest.provides?.api) {
-                resolveMap.set(manifest.name, path.resolve(entryDir, manifest.provides.api));
-            }
-        }
-        // A real content.scriptsDir entry (a genuine standalone script
-        // contributor, not just a library's API file) can still override
-        // the provides.api alias above for its own package name - resolved
-        // second, deliberately, so a package declaring BOTH gets its real
-        // script entry as the import target, not its bare library API file.
-        for (const { manifest, dir: entryDir } of scriptEntries) {
-            const entryFile = resolveScriptEntry(manifest, entryDir);
-            if (entryFile) resolveMap.set(manifest.name, entryFile);
-        }
-        const rootEntry = resolveMap.get(modManifest.name);
-        if (rootEntry) {
-            const { js, map } = bundleScripts(modManifest, rootEntry, resolveMap);
-            // OR-Track M3's remaining two checks (made real): run against the
-            // ACTUAL bundled output, not the pre-bundle source - catches the
-            // real "missing engine.scriptModules" and "early-execution script
-            // crash" incidents from tonight at real build time, not in-game.
-            lintIssues.push(...checkScriptModulesCompleteness(js, modManifest.engine?.scriptModules, modManifest.name));
-            lintIssues.push(...scanEarlyExecutionCalls(js, modManifest.name));
-            put(bp, "scripts/main.js", js);
-            if (map) put(bp, "scripts/main.js.map", map);
-        } else {
-            put(bp, "scripts/main.js", "// GENERATED by OpenRock build - this mod declares no script entry.\n");
-        }
-        put(bp, "manifest.json", JSON.stringify(built.bp, null, 2) + "\n");
-    }
-    put(rp, "manifest.json", JSON.stringify(built.rp, null, 2) + "\n");
-
-    // The real "catch at compile time" goal (demand 3/5 of the session):
-    // any real lint issue fails buildMod() loudly, before anything is
-    // written to disk or deployed - never a warning that's easy to miss.
+function assertNoLintIssues(modManifest, lintIssues) {
     if (lintIssues.length) {
         throw new Error(`buildMod(): "${modManifest.name}" failed OpenRock's entity/script lint (OR-Track M3) with ${lintIssues.length} real issue(s):\n${lintIssues.map(i => `  - ${i}`).join("\n")}`);
     }
+}
 
-    return { bp, rp, manifest: modManifest };
+/**
+ * Builds a mod, OR a hybrid library that declares its own `packs`
+ * (OR-Track K: a shared runtime addon other packages depend on via
+ * type:"library" for its register()-time API, but that's ALSO its own
+ * independently-installable BP/RP pair - not duplicated into every
+ * consuming mod's build). The function name stays `buildMod` for
+ * continuity with existing callers; "is this buildable at all" is
+ * `manifest.kind === "mod" || (kind === "library" && manifest.packs)`.
+ *
+ * A full, correct, from-scratch build every time - the safe, always-right
+ * baseline every other command (build/check/export/deploy, and
+ * createIncrementalBuild()'s own fallback path) can rely on. For a
+ * long-running `dev` watch loop that wants to skip re-rendering content
+ * that provably didn't change, see createIncrementalBuild() below.
+ *
+ * @param {string} modDir - a directory containing openrock.mod.json or a
+ *   openrock.library.json with its own "packs".
+ * @param {object} [opts]
+ * @param {string} [opts.vendorDir] - base directory "submodule"-type deps resolve against.
+ * @param {Record<string,string>} [opts.libraryDirs] - name -> directory, for "library"-type deps.
+ * @returns {{ bp: Map<string,Buffer>|null, rp: Map<string,Buffer>, manifest: object }}
+ *   `bp` is `null` for a resource-pack-only package (OR-Track G,
+ *   `manifest.packs.behavior === false`) - there is genuinely no behavior
+ *   pack to write/deploy/export, not an empty one.
+ */
+function buildMod(modDir, opts = {}) {
+    const plan = resolveBuildPlan(modDir, opts);
+    const bp = plan.hasBehaviorPack ? new Map() : null;
+    const rp = new Map();
+
+    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi);
+
+    const lintIssues = runEntityLints({ bp, rp });
+    renderManifestJson(plan, { bp, rp });
+    if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
+
+    assertNoLintIssues(plan.modManifest, lintIssues);
+    return { bp, rp, manifest: plan.modManifest };
 }
 
 // Resolves which file, if any, is this package's own real in-game script
@@ -511,4 +550,206 @@ function discoverMods(modsDir) {
     return out;
 }
 
-module.exports = { buildMod, collectEntries, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree };
+/**
+ * Finds which `plan.ordered` entry a real absolute file path lives under -
+ * the LONGEST matching directory prefix wins, so a dependency nested
+ * inside another package's own directory (not a normal layout, but not
+ * forbidden either) still attributes correctly.
+ */
+function findOwningEntry(plan, absPath) {
+    let best = null;
+    for (const entry of plan.ordered) {
+        const entryDirAbs = path.resolve(entry.dir);
+        if (absPath !== entryDirAbs && !absPath.startsWith(entryDirAbs + path.sep)) continue;
+        if (!best || entryDirAbs.length > path.resolve(best.dir).length) best = entry;
+    }
+    return best;
+}
+
+/**
+ * Classifies a real, absolute changed-file path into exactly the one real
+ * compile unit it belongs to, or `null` if it can't be safely attributed
+ * to one (the real, correct trigger for createIncrementalBuild()'s full-
+ * rebuild fallback - e.g. a package manifest itself changed, or the file
+ * sits outside every known content directory).
+ * @returns {null | {kind: "overlay", entry, side: "bp"|"rp", dirAbs: string}
+ *   | {kind: "entityDsl", entry, dirAbs: string} | {kind: "scripts", entry}
+ *   | {kind: "datagen", entry} | {kind: "manifestDsl"}}
+ */
+function classifyChange(plan, absPath) {
+    const entry = findOwningEntry(plan, absPath);
+    if (entry) {
+        const content = entry.manifest.content ?? {};
+        for (const [field, side] of [["bpOverlayDir", "bp"], ["rpOverlayDir", "rp"]]) {
+            if (!content[field]) continue;
+            const dirAbs = path.resolve(entry.dir, content[field]);
+            if (absPath === dirAbs || absPath.startsWith(dirAbs + path.sep)) return { kind: "overlay", entry, side, dirAbs };
+        }
+        if (content.entityDsl) {
+            const dirAbs = path.resolve(entry.dir, content.entityDsl);
+            if (absPath === dirAbs || absPath.startsWith(dirAbs + path.sep)) return { kind: "entityDsl", entry, dirAbs };
+        }
+        if (content.scriptsDir) {
+            const dirAbs = path.resolve(entry.dir, content.scriptsDir);
+            if (absPath === dirAbs || absPath.startsWith(dirAbs + path.sep)) return { kind: "scripts", entry };
+        }
+        if (content.datagenEntry) {
+            const fileAbs = path.resolve(entry.dir, content.datagenEntry);
+            if (absPath === fileAbs) return { kind: "datagen", entry };
+        }
+    }
+    const rootManifestDsl = plan.modManifest.content?.manifestDsl;
+    if (rootManifestDsl) {
+        const fileAbs = path.resolve(plan.dir, rootManifestDsl);
+        if (absPath === fileAbs) return { kind: "manifestDsl" };
+    }
+    return null;
+}
+
+/**
+ * OR-Track Q6, made real: a genuinely incremental builder for `openrock
+ * dev`'s long-running watch loop. Keeps ONE persistent `{bp, rp}` Map pair
+ * across many `.rebuild(absChangedPath)` calls, re-rendering ONLY the one
+ * real compile unit a changed file belongs to (see classifyChange()) -
+ * never re-running the whole dependency tree's overlay copies, datagen,
+ * entity DSL compiles, or script bundling just because ONE file in ONE of
+ * them changed. Falls back to a real, full `buildMod()` rebuild (and resets
+ * its own cached state from that fresh result) whenever a change can't be
+ * safely attributed to one unit in isolation - a merged-registry overlay
+ * file, a datagenEntry script (which can write into BOTH bp and rp and
+ * merge-register), or a file outside every known content directory (e.g.
+ * the package's own manifest.json, or a brand-new content directory that
+ * didn't exist during the last build). This mirrors buildMod()'s own
+ * ordering and lint discipline exactly - runEntityLints() and
+ * renderManifestJson() re-run after EVERY rebuild, incremental or full, so
+ * lint coverage and the generated manifest.json are never stale.
+ *
+ * @param {string} modDir
+ * @param {object} [opts] - same shape as buildMod()'s own opts.
+ * @returns {{ build: () => {bp,rp,manifest}, rebuild: (absChangedPath: string) => {bp,rp,manifest}, isFullBuild: () => boolean }}
+ */
+function createIncrementalBuild(modDir, opts = {}) {
+    let plan = null;
+    let bp = null;
+    let rp = null;
+    let lastWasFullBuild = true;
+    // dirAbs (an entityDsl directory) -> Set of "entities/<name>.json"-shaped
+    // keys IT was responsible for as of the last time we knew for sure -
+    // lets an incremental entityDsl rebuild remove a key that stopped being
+    // produced (an entity file deleted, or its identifier renamed) instead
+    // of leaving a stale JSON file behind forever.
+    const entityDslOutputKeys = new Map();
+
+    function fullBuild() {
+        plan = resolveBuildPlan(modDir, opts);
+        bp = plan.hasBehaviorPack ? new Map() : null;
+        rp = new Map();
+        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi);
+        const lintIssues = runEntityLints({ bp, rp });
+        renderManifestJson(plan, { bp, rp });
+        if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
+        assertNoLintIssues(plan.modManifest, lintIssues);
+        lastWasFullBuild = true;
+
+        // Seed entityDslOutputKeys for real, at zero extra real compile
+        // cost - compileEntityDsl() was already called (and its own Q6
+        // cache populated) for each of these directories by
+        // renderEntryContent() above, so this is a guaranteed cache hit,
+        // never a second real tsc invocation.
+        entityDslOutputKeys.clear();
+        if (bp) {
+            for (const { manifest, dir: entryDir } of plan.ordered) {
+                const entityDslRel = manifest.content?.entityDsl;
+                if (!entityDslRel) continue;
+                const dirAbs = path.resolve(entryDir, entityDslRel);
+                const vars = { ns: manifest.namespace ?? "" };
+                const keys = new Set(Object.keys(compileEntityDsl(dirAbs)).map(k => fill(k, vars)));
+                entityDslOutputKeys.set(dirAbs, keys);
+            }
+        }
+        return { bp, rp, manifest: plan.modManifest };
+    }
+
+    function rebuild(absChangedPath) {
+        if (!plan) return fullBuild(); // no prior build to incrementally extend - do a real full one
+        const target = classifyChange(plan, path.resolve(absChangedPath));
+        if (!target) return fullBuild();
+
+        lastWasFullBuild = false;
+        switch (target.kind) {
+            case "overlay": {
+                const map = target.side === "bp" ? bp : rp;
+                if (!map) return fullBuild(); // shouldn't happen (bp overlay with no bp), but never guess
+                const vars = { ns: target.entry.manifest.namespace ?? "" };
+                const rel = path.relative(target.dirAbs, path.resolve(absChangedPath)).split(path.sep).join("/");
+                const outRel = fill(rel, vars);
+                // A MERGED_FILES path (e.g. a shared registry JSON multiple
+                // packages contribute to) can't be safely re-derived from
+                // just the ONE changed contributor in isolation without
+                // replaying every other package's own contribution too -
+                // genuinely unsafe to special-case, so it's always a real
+                // full rebuild instead of a guess that could silently drop
+                // another package's real data.
+                if (MERGED_FILES.has(outRel)) return fullBuild();
+                if (!fs.existsSync(absChangedPath)) {
+                    map.delete(outRel); // a real deletion - remove it from the pack too
+                } else {
+                    const raw = fs.readFileSync(absChangedPath);
+                    const data = TEXT_EXT.has(path.extname(absChangedPath)) ? fill(raw.toString("utf8"), vars) : raw;
+                    put(map, outRel, data);
+                }
+                break;
+            }
+            case "entityDsl": {
+                if (!bp) return fullBuild();
+                // compileEntityDsl() re-lists target.dirAbs itself, so an
+                // added/removed *.entity.tsx file in this same directory is
+                // picked up for real too, not just an edit to an existing one.
+                const vars = { ns: target.entry.manifest.namespace ?? "" };
+                const entityOutput = compileEntityDsl(target.dirAbs);
+                const freshKeys = new Set(Object.keys(entityOutput).map(k => fill(k, vars)));
+
+                // Any entity JSON this directory previously contributed that
+                // the fresh output no longer includes (an entity file was
+                // deleted, or its identifier renamed) is removed here -
+                // otherwise a stale entities/<old-name>.json would linger in
+                // the pack forever, silently outliving its own source.
+                const previousKeys = entityDslOutputKeys.get(target.dirAbs) ?? new Set();
+                for (const staleKey of previousKeys) if (!freshKeys.has(staleKey)) bp.delete(staleKey);
+                entityDslOutputKeys.set(target.dirAbs, freshKeys);
+
+                for (const [outRel, doc] of Object.entries(entityOutput)) put(bp, fill(outRel, vars), JSON.stringify(doc, null, 2) + "\n");
+                break;
+            }
+            case "scripts": {
+                if (!bp) return fullBuild();
+                const lintIssues = renderScripts(plan, bp);
+                lintIssues.push(...runEntityLints({ bp, rp }));
+                assertNoLintIssues(plan.modManifest, lintIssues);
+                return { bp, rp, manifest: plan.modManifest };
+            }
+            case "datagen": {
+                // Can emit into BOTH bp and rp, and can merge-register into
+                // shared files - the same "can't safely replay in isolation"
+                // reasoning as the MERGED_FILES overlay case above applies
+                // even harder here (an arbitrary script, not a static file).
+                return fullBuild();
+            }
+            case "manifestDsl": {
+                renderManifestJson(plan, { bp, rp });
+                break;
+            }
+        }
+
+        const lintIssues = runEntityLints({ bp, rp });
+        assertNoLintIssues(plan.modManifest, lintIssues);
+        return { bp, rp, manifest: plan.modManifest };
+    }
+
+    return { build: fullBuild, rebuild, isFullBuild: () => lastWasFullBuild };
+}
+
+module.exports = {
+    buildMod, collectEntries, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree,
+    createIncrementalBuild, resolveBuildPlan, classifyChange,
+};

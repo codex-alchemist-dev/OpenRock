@@ -10,8 +10,14 @@ const fs = require("fs");
 const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildManifestSet } = require("./manifestBuilder.js");
+const { signatureForFiles, withCompileCache } = require("../devCache.js");
 
 const TEMPLATE_TSCONFIG = path.join(__dirname, "tsconfig.template.json");
+// OR-Track Q6: this DSL's own shared runtime files - see entityCompiler.js's
+// identical RUNTIME_FILES for the full rationale (cache invalidation +
+// require-cache busting for files a compiled unit transitively requires).
+const RUNTIME_FILES = [path.join(__dirname, "jsx-runtime.js"), path.join(__dirname, "components.js"), path.join(__dirname, "manifestBuilder.js")];
+const compileCache = new Map(); // `${manifestDslFile}::${outDir}` -> {signature, value}
 
 // Same real, confirmed tsc rootDir-inference issue entityCompiler.js's own
 // findCompiledFile() works around - not shared as one util because each
@@ -50,27 +56,32 @@ function compileManifestDsl(manifestDslFile, { outDir } = {}) {
 
     const dir = path.dirname(manifestDslFile);
     const fileName = path.basename(manifestDslFile);
-    const realOutDir = outDir ?? path.join(dir, ".manifest-dsl-dist");
-    const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
-    const tsconfig = {
-        ...template,
-        compilerOptions: { ...template.compilerOptions, outDir: realOutDir },
-        include: [fileName],
-    };
-    const tsconfigPath = path.join(dir, "tsconfig.manifest-dsl.json");
-    fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
-    try {
-        compileWithRealTsc(tsconfigPath, { cwd: dir });
-    } finally {
-        fs.rmSync(tsconfigPath, { force: true });
-    }
+    const signature = signatureForFiles([manifestDslFile, ...RUNTIME_FILES]);
+    const cacheKey = `${manifestDslFile}::${outDir ?? ""}`;
 
-    const baseName = fileName.replace(/\.manifest\.tsx?$/, "");
-    const compiledPath = findCompiledFile(realOutDir, `${baseName}.manifest.js`);
-    if (!compiledPath) throw new Error(`manifestCompiler: couldn't find compiled output for "${fileName}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
-    const mod = requireCompiled(compiledPath);
-    const node = mod.default ?? mod;
-    return buildManifestSet(node);
+    return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
+        const realOutDir = outDir ?? path.join(dir, ".manifest-dsl-dist");
+        const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
+        const tsconfig = {
+            ...template,
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir },
+            include: [fileName],
+        };
+        const tsconfigPath = path.join(dir, "tsconfig.manifest-dsl.json");
+        fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
+        try {
+            compileWithRealTsc(tsconfigPath, { cwd: dir });
+        } finally {
+            fs.rmSync(tsconfigPath, { force: true });
+        }
+
+        const baseName = fileName.replace(/\.manifest\.tsx?$/, "");
+        const compiledPath = findCompiledFile(realOutDir, `${baseName}.manifest.js`);
+        if (!compiledPath) throw new Error(`manifestCompiler: couldn't find compiled output for "${fileName}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
+        const mod = requireCompiled(compiledPath);
+        const node = mod.default ?? mod;
+        return buildManifestSet(node);
+    });
 }
 
 module.exports = { compileManifestDsl };

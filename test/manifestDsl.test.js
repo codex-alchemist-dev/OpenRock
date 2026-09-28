@@ -9,6 +9,7 @@
 "use strict";
 
 const assert = require("assert");
+const fs = require("fs");
 const path = require("path");
 const { compileManifestDsl } = require("../src/manifestDsl/manifestCompiler.js");
 const { mergeManifestDoc } = require("../src/manifestDsl/manifestBuilder.js");
@@ -91,6 +92,36 @@ test("mergeManifestDoc: a real key collision lets the DSL win over the generated
 test("mergeManifestDoc: a null dslDoc (no manifest DSL authored) returns the generated document completely unchanged", () => {
     const generated = { format_version: 2, header: { name: "x" } };
     assert.strictEqual(mergeManifestDoc(generated, null), generated);
+});
+
+test("compileManifestDsl (OR-Track Q6): an unchanged file returns the SAME cached object - real tsc is skipped, not just fast", () => {
+    const first = compileManifestDsl(FIXTURE);
+    const second = compileManifestDsl(FIXTURE);
+    assert.strictEqual(first, second, "a cache hit must return the exact cached object, proving compileManifestDsl() didn't recompile at all");
+});
+
+test("compileManifestDsl (OR-Track Q6): editing the real .manifest.tsx file produces a genuinely fresh, different compile", () => {
+    // Same drive as the repo, not os.tmpdir() - see entityDsl.test.js's
+    // identical note for the real reason (tsc's rootDir inference needs a
+    // common ancestor, and Windows drive letters have none across drives).
+    const workDir = fs.mkdtempSync(path.join(__dirname, "fixtures", "openrock-manifestdsl-cache-test-"));
+    const src = fs.readFileSync(FIXTURE, "utf8");
+    const srcPath = path.join(workDir, "pilot.manifest.tsx");
+    // The fixture's relative imports ("../../../src/...") assume its real
+    // fixtures/manifest-dsl-pilot/ location - rewrite to an absolute path
+    // for this test's own, differently-nested temp directory.
+    const absSrcDir = path.join(__dirname, "..", "src").split(path.sep).join("/");
+    fs.writeFileSync(srcPath, src.replace(/\.\.\/\.\.\/\.\.\/src/g, absSrcDir));
+
+    const before = compileManifestDsl(srcPath);
+    assert.strictEqual(before.bp.format_version, 2);
+
+    fs.writeFileSync(srcPath, fs.readFileSync(srcPath, "utf8").replace("formatVersion={2}", "formatVersion={99}"));
+    const after = compileManifestDsl(srcPath);
+    assert.strictEqual(after.bp.format_version, 99, "a real source edit must be picked up, not masked by the cache");
+    assert.notStrictEqual(before, after);
+
+    fs.rmSync(workDir, { recursive: true, force: true });
 });
 
 console.log(`\n${passed} passed`);
