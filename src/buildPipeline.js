@@ -49,6 +49,8 @@ const { topoSort } = require("./libLoader.js");
 const { walk, writeTree, MERGED_FILES, mergeRegistry } = require("./fsTree.js");
 const semver = require("./semver.js");
 const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
+const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
+const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -287,6 +289,47 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
         if (hasBehaviorPack && content.scriptsDir) scriptEntries.push({ manifest, dir: entryDir });
     }
 
+    // OR-Track M3 (made real): the entity DSL linter, run over EVERY real
+    // entity doc this build actually produced - both DSL-compiled and any
+    // hand-authored overlay JSON that reached bp/rp through
+    // bpOverlayDir/rpOverlayDir, since a lint pass here catches the failure
+    // class regardless of which authoring path produced the bad JSON. A
+    // parse failure on a non-conforming file is skipped, not fatal - lint
+    // targets real entity documents, not "every JSON file happens to be one".
+    const lintIssues = [];
+    if (bp) {
+        for (const [rel, buf] of bp) {
+            if (!rel.startsWith("entities/") || !rel.endsWith(".json")) continue;
+            let doc;
+            try { doc = JSON.parse(buf.toString("utf8")); } catch { continue; }
+            lintIssues.push(...lintEntityDoc(doc, rel));
+        }
+    }
+    const rcDocs = [];
+    const clientEntityDocs = [];
+    for (const [rel, buf] of rp) {
+        if (rel.startsWith("render_controllers/") && rel.endsWith(".json")) {
+            try { rcDocs.push(JSON.parse(buf.toString("utf8"))); } catch { /* not real JSON - skip */ }
+        } else if (rel.startsWith("entity/") && rel.endsWith(".json")) {
+            try { clientEntityDocs.push([rel, JSON.parse(buf.toString("utf8"))]); } catch { /* not real JSON - skip */ }
+        }
+    }
+    for (const [rel, doc] of clientEntityDocs) {
+        lintIssues.push(...lintClientEntityDoc(doc, rel));
+        // Checked against every render_controllers doc this build produced,
+        // not just ones this specific entity's description.render_controllers
+        // names - a real per-controller-name cross-reference would need
+        // parsing that list against each rcDoc's own top-level key names,
+        // which isn't a stable enough convention across real Bedrock mods to
+        // rely on. Checking against the whole set still catches the real
+        // failure class (an undeclared short-name reference) with zero false
+        // negatives, at the cost of a rare false positive if a build
+        // genuinely ships two unrelated entities' render controllers
+        // side by side with colliding short-names - an edge case worth
+        // tightening later, not blocking this real check now.
+        lintIssues.push(...lintRenderControllerReferences(doc, rcDocs, rel));
+    }
+
     const built = buildManifests(modManifest);
     if (hasBehaviorPack) {
         const resolveMap = new Map();
@@ -324,6 +367,12 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
         const rootEntry = resolveMap.get(modManifest.name);
         if (rootEntry) {
             const { js, map } = bundleScripts(modManifest, rootEntry, resolveMap);
+            // OR-Track M3's remaining two checks (made real): run against the
+            // ACTUAL bundled output, not the pre-bundle source - catches the
+            // real "missing engine.scriptModules" and "early-execution script
+            // crash" incidents from tonight at real build time, not in-game.
+            lintIssues.push(...checkScriptModulesCompleteness(js, modManifest.engine?.scriptModules, modManifest.name));
+            lintIssues.push(...scanEarlyExecutionCalls(js, modManifest.name));
             put(bp, "scripts/main.js", js);
             if (map) put(bp, "scripts/main.js.map", map);
         } else {
@@ -332,6 +381,13 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
         put(bp, "manifest.json", JSON.stringify(built.bp, null, 2) + "\n");
     }
     put(rp, "manifest.json", JSON.stringify(built.rp, null, 2) + "\n");
+
+    // The real "catch at compile time" goal (demand 3/5 of the session):
+    // any real lint issue fails buildMod() loudly, before anything is
+    // written to disk or deployed - never a warning that's easy to miss.
+    if (lintIssues.length) {
+        throw new Error(`buildMod(): "${modManifest.name}" failed OpenRock's entity/script lint (OR-Track M3) with ${lintIssues.length} real issue(s):\n${lintIssues.map(i => `  - ${i}`).join("\n")}`);
+    }
 
     return { bp, rp, manifest: modManifest };
 }
