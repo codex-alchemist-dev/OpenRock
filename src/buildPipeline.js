@@ -64,6 +64,8 @@ const { topoSort } = require("./libLoader.js");
 const { walk, writeTree, MERGED_FILES, mergeRegistry } = require("./fsTree.js");
 const semver = require("./semver.js");
 const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
+const { compileBlockDsl } = require("./blockDsl/blockCompiler.js");
+const { compileItemDsl } = require("./itemDsl/itemCompiler.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
 const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
@@ -91,6 +93,21 @@ function fill(text, vars) {
 }
 
 const put = (map, rel, data) => map.set(rel, Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
+
+// Every real "directory of *.<kind>.tsx files, compiled into real Bedrock
+// JSON" Crystal Manifest-* dialect (Crystal Manifest-Entity, -Block,
+// -Item, see docs/crystal.md) is REAL PLUMBING around one shared shape -
+// table-driven so a new dialect is a one-line addition here, never a
+// third/fourth copy-pasted render/classify/incremental-tracking path.
+// Each dialect's own compiler (entityCompiler.js/blockCompiler.js/
+// itemCompiler.js) already has its own real Q6 compile cache - this table
+// only concerns ITSELF with "which manifest.content field, which real
+// compile function," nothing about caching or emission.
+const DIRECTORY_DSLS = [
+    { contentField: "entityDsl", compile: compileEntityDsl },
+    { contentField: "blockDsl", compile: compileBlockDsl },
+    { contentField: "itemDsl", compile: compileItemDsl },
+];
 
 /**
  * Walks `rootManifest`'s full dependency tree (submodule deps resolved via
@@ -257,10 +274,50 @@ function putJson(map, outRel, obj) {
     put(map, outRel, JSON.stringify(obj, null, 2) + "\n");
 }
 
+// A Crystal Manifest-* dialect's own output entry (OR-Track M6) can be
+// either a real JSON document (an entity/block/item definition) or a real
+// raw binary asset (a co-located texture file, copied verbatim) - this
+// dispatches to the right real handling for each, so a texture Buffer
+// never gets accidentally run through JSON.stringify() (which would
+// mangle it into a {"type":"Buffer","data":[...]} object, not real bytes).
+function putDirectoryDslEntry(map, outRel, value) {
+    if (Buffer.isBuffer(value)) put(map, outRel, value);
+    else putJson(map, outRel, value);
+}
+
+// Real, standing architectural rule: OpenRock is a completely different
+// format from native Minecraft, and it must be PHYSICALLY IMPOSSIBLE to
+// compile hand-rolled, native Bedrock documents through it - every real
+// document a Crystal Manifest-* dialect (see docs/crystal.md) now covers
+// has to be authored through that dialect, never smuggled in as a raw
+// file under bpOverlayDir/rpOverlayDir. This is enforced here, not just
+// documented: a real file landing at one of these paths fails the whole
+// build loudly, naming the real Crystal dialect that owns it. Anything
+// NOT in this list (textures, sounds, loot_tables, recipes, trading,
+// animations, and any render_controllers a mod still needs to hand-author
+// - no Crystal dialect covers that yet) is unaffected; this only blocks
+// the exact real document shapes OpenRock's own DSLs now fully own.
+const NATIVE_ONLY_PATHS = [
+    { pattern: /^entities\//, dialect: "Crystal Manifest-Entity", field: "content.entityDsl" },
+    { pattern: /^entity\//, dialect: "Crystal Manifest-Entity", field: "content.entityDsl" },
+    { pattern: /^blocks\//, dialect: "Crystal Manifest-Block", field: "content.blockDsl" },
+    { pattern: /^items\//, dialect: "Crystal Manifest-Item", field: "content.itemDsl" },
+];
+
+function assertNotNativeOnlyPath(manifestName, outRel) {
+    const hit = NATIVE_ONLY_PATHS.find(({ pattern }) => pattern.test(outRel));
+    if (hit) {
+        throw new Error(
+            `"${manifestName}": a real, hand-rolled native Bedrock file at "${outRel}" was found under a plain overlay directory (bpOverlayDir/rpOverlayDir) - OpenRock physically cannot compile hand-authored ${hit.dialect.replace("Crystal Manifest-", "").toLowerCase()} documents. ` +
+            `Author this through ${hit.dialect} instead (${hit.field}).`
+        );
+    }
+}
+
 /**
  * Renders ONE package entry's own bpOverlayDir/rpOverlayDir/datagenEntry/
- * entityDsl content into `{bp, rp}` - the one real "compile unit" per
- * package this pipeline knows about (scripts are handled separately by
+ * Crystal Manifest-* content into `{bp, rp}` - the one real "compile unit"
+ * per package this pipeline knows about (scripts are handled separately by
  * renderScripts() below, since script bundling spans the WHOLE dependency
  * graph, not one package in isolation). Used both by buildMod()'s full
  * assembly (called once per entry, in order) and by
@@ -279,6 +336,7 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi)
         for (const rel of walk(abs)) {
             const raw = fs.readFileSync(path.join(abs, rel));
             const outRel = fill(rel, vars);
+            assertNotNativeOnlyPath(manifest.name, outRel);
             const data = TEXT_EXT.has(path.extname(rel)) ? fill(raw.toString("utf8"), vars) : raw;
             if (MERGED_FILES.has(outRel) && map.has(outRel)) {
                 const base = JSON.parse(map.get(outRel).toString("utf8"));
@@ -308,14 +366,18 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi)
         }
     }
 
-    // content.entityDsl (OR-Track M, made real): a directory of real
-    // *.entity.tsx files, compiled via src/entityDsl/entityCompiler.js into
-    // real Bedrock entity JSON, merged into the pack the same way
+    // The real Crystal Manifest-Entity/-Block/-Item dialects (OR-Track
+    // M/M4/M5, made real): each is a directory of real *.<kind>.tsx files,
+    // compiled into real Bedrock JSON, merged into the pack the same way
     // datagenEntry's output is.
-    if (bp && content.entityDsl) {
-        const entityDslAbs = path.resolve(entryDir, content.entityDsl);
-        const entityOutput = compileEntityDsl(entityDslAbs);
-        for (const [outRel, doc] of Object.entries(entityOutput)) putJson(bp, fill(outRel, vars), doc);
+    if (bp) {
+        for (const { contentField, compile } of DIRECTORY_DSLS) {
+            if (!content[contentField]) continue;
+            const dslDirAbs = path.resolve(entryDir, content[contentField]);
+            const output = compile(dslDirAbs);
+            for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
+            if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), doc);
+        }
     }
 }
 
@@ -573,7 +635,7 @@ function findOwningEntry(plan, absPath) {
  * rebuild fallback - e.g. a package manifest itself changed, or the file
  * sits outside every known content directory).
  * @returns {null | {kind: "overlay", entry, side: "bp"|"rp", dirAbs: string}
- *   | {kind: "entityDsl", entry, dirAbs: string} | {kind: "scripts", entry}
+ *   | {kind: "directoryDsl", entry, dirAbs: string, compile: Function} | {kind: "scripts", entry}
  *   | {kind: "datagen", entry} | {kind: "manifestDsl"}}
  */
 function classifyChange(plan, absPath) {
@@ -585,9 +647,10 @@ function classifyChange(plan, absPath) {
             const dirAbs = path.resolve(entry.dir, content[field]);
             if (absPath === dirAbs || absPath.startsWith(dirAbs + path.sep)) return { kind: "overlay", entry, side, dirAbs };
         }
-        if (content.entityDsl) {
-            const dirAbs = path.resolve(entry.dir, content.entityDsl);
-            if (absPath === dirAbs || absPath.startsWith(dirAbs + path.sep)) return { kind: "entityDsl", entry, dirAbs };
+        for (const { contentField, compile } of DIRECTORY_DSLS) {
+            if (!content[contentField]) continue;
+            const dirAbs = path.resolve(entry.dir, content[contentField]);
+            if (absPath === dirAbs || absPath.startsWith(dirAbs + path.sep)) return { kind: "directoryDsl", entry, dirAbs, compile };
         }
         if (content.scriptsDir) {
             const dirAbs = path.resolve(entry.dir, content.scriptsDir);
@@ -633,12 +696,15 @@ function createIncrementalBuild(modDir, opts = {}) {
     let bp = null;
     let rp = null;
     let lastWasFullBuild = true;
-    // dirAbs (an entityDsl directory) -> Set of "entities/<name>.json"-shaped
-    // keys IT was responsible for as of the last time we knew for sure -
-    // lets an incremental entityDsl rebuild remove a key that stopped being
-    // produced (an entity file deleted, or its identifier renamed) instead
-    // of leaving a stale JSON file behind forever.
-    const entityDslOutputKeys = new Map();
+    // dirAbs (a Crystal Manifest-Entity/-Block/-Item directory) -> Set of
+    // output-path keys IT was responsible for as of the last time we knew
+    // for sure - lets an incremental directoryDsl rebuild remove a key
+    // that stopped being produced (a source file deleted, or its
+    // identifier renamed) instead of leaving a stale JSON file behind
+    // forever. One shared map across ALL directory-DSL dialects - real
+    // output paths are already globally unique (entities/blocks/items
+    // never collide), so there's no real need for a per-dialect map.
+    const directoryDslOutputKeys = new Map();
 
     function fullBuild() {
         plan = resolveBuildPlan(modDir, opts);
@@ -651,20 +717,25 @@ function createIncrementalBuild(modDir, opts = {}) {
         assertNoLintIssues(plan.modManifest, lintIssues);
         lastWasFullBuild = true;
 
-        // Seed entityDslOutputKeys for real, at zero extra real compile
-        // cost - compileEntityDsl() was already called (and its own Q6
-        // cache populated) for each of these directories by
+        // Seed directoryDslOutputKeys for real, at zero extra real compile
+        // cost - each dialect's compile() was already called (and its own
+        // Q6 cache populated) for each of these directories by
         // renderEntryContent() above, so this is a guaranteed cache hit,
         // never a second real tsc invocation.
-        entityDslOutputKeys.clear();
+        directoryDslOutputKeys.clear();
         if (bp) {
             for (const { manifest, dir: entryDir } of plan.ordered) {
-                const entityDslRel = manifest.content?.entityDsl;
-                if (!entityDslRel) continue;
-                const dirAbs = path.resolve(entryDir, entityDslRel);
                 const vars = { ns: manifest.namespace ?? "" };
-                const keys = new Set(Object.keys(compileEntityDsl(dirAbs)).map(k => fill(k, vars)));
-                entityDslOutputKeys.set(dirAbs, keys);
+                for (const { contentField, compile } of DIRECTORY_DSLS) {
+                    const dslRel = manifest.content?.[contentField];
+                    if (!dslRel) continue;
+                    const dirAbs = path.resolve(entryDir, dslRel);
+                    const output = compile(dirAbs);
+                    directoryDslOutputKeys.set(dirAbs, {
+                        bp: new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars))),
+                        rp: new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars))),
+                    });
+                }
             }
         }
         return { bp, rp, manifest: plan.modManifest };
@@ -683,6 +754,7 @@ function createIncrementalBuild(modDir, opts = {}) {
                 const vars = { ns: target.entry.manifest.namespace ?? "" };
                 const rel = path.relative(target.dirAbs, path.resolve(absChangedPath)).split(path.sep).join("/");
                 const outRel = fill(rel, vars);
+                assertNotNativeOnlyPath(target.entry.manifest.name, outRel);
                 // A MERGED_FILES path (e.g. a shared registry JSON multiple
                 // packages contribute to) can't be safely re-derived from
                 // just the ONE changed contributor in isolation without
@@ -700,25 +772,31 @@ function createIncrementalBuild(modDir, opts = {}) {
                 }
                 break;
             }
-            case "entityDsl": {
+            case "directoryDsl": {
                 if (!bp) return fullBuild();
-                // compileEntityDsl() re-lists target.dirAbs itself, so an
-                // added/removed *.entity.tsx file in this same directory is
+                // compile() re-lists target.dirAbs itself, so an
+                // added/removed source file in this same directory is
                 // picked up for real too, not just an edit to an existing one.
                 const vars = { ns: target.entry.manifest.namespace ?? "" };
-                const entityOutput = compileEntityDsl(target.dirAbs);
-                const freshKeys = new Set(Object.keys(entityOutput).map(k => fill(k, vars)));
+                const output = target.compile(target.dirAbs);
+                const freshBpKeys = new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars)));
+                const freshRpKeys = new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars)));
 
-                // Any entity JSON this directory previously contributed that
-                // the fresh output no longer includes (an entity file was
+                // Any output this directory previously contributed that the
+                // fresh output no longer includes (a source file was
                 // deleted, or its identifier renamed) is removed here -
-                // otherwise a stale entities/<old-name>.json would linger in
-                // the pack forever, silently outliving its own source.
-                const previousKeys = entityDslOutputKeys.get(target.dirAbs) ?? new Set();
-                for (const staleKey of previousKeys) if (!freshKeys.has(staleKey)) bp.delete(staleKey);
-                entityDslOutputKeys.set(target.dirAbs, freshKeys);
+                // otherwise a stale JSON file would linger in the pack
+                // forever, silently outliving its own source. bp and rp
+                // keys are tracked and cleaned up separately - Crystal
+                // Manifest-Entity's own RP client_entity output lives in
+                // `rp`, everything else in `bp`.
+                const previous = directoryDslOutputKeys.get(target.dirAbs) ?? { bp: new Set(), rp: new Set() };
+                for (const staleKey of previous.bp) if (!freshBpKeys.has(staleKey)) bp.delete(staleKey);
+                if (rp) for (const staleKey of previous.rp) if (!freshRpKeys.has(staleKey)) rp.delete(staleKey);
+                directoryDslOutputKeys.set(target.dirAbs, { bp: freshBpKeys, rp: freshRpKeys });
 
-                for (const [outRel, doc] of Object.entries(entityOutput)) put(bp, fill(outRel, vars), JSON.stringify(doc, null, 2) + "\n");
+                for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
+                if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), doc);
                 break;
             }
             case "scripts": {

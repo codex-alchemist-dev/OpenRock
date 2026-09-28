@@ -8,7 +8,14 @@ import { Entity, TypeFamily, Health, Movement, NavigationWalk, Physics, Collisio
 // events via tools/lib/genNavSlots.js - see test/entityDsl.test.js for the
 // byte-identical proof against the original hand-written version.
 export default (
-    <Entity identifier="prd:nav_test" spawnable summonable>
+    <Entity
+        identifier="prd:nav_test" spawnable summonable
+        materials={{ default: "zombie" }}
+        textures={{ default: "textures/entity/zombie/zombie" }}
+        geometry={{ default: "geometry.zombie" }}
+        renderControllers={["controller.render.zombie"]}
+        spawnEgg={{ base_color: "#3355ff", overlay_color: "#ffffff" }}
+    >
         <Pathfinding slots={5} />
         <TypeFamily family={["prd_nav_test", "mob"]} />
         <Health value={20} />

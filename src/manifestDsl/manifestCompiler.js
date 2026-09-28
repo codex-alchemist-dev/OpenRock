@@ -1,9 +1,10 @@
-// OpenRock manifest DSL - the real compiler entry point (OR-Track O),
-// mirroring src/entityDsl/entityCompiler.js's own proven shape: real tsc
-// compiles a mod's single `.manifest.tsx` file, the compiled output is
-// loaded via MinUI's shared, proven requireCompiled(), and the default-
-// exported <ManifestSet> node is walked through manifestBuilder.js's real,
-// declarative emission backend.
+// OpenRock manifest DSL, real name "Crystal Manifest" (see docs/crystal.md
+// for the full naming rationale) - the real compiler entry point
+// (OR-Track O), mirroring src/entityDsl/entityCompiler.js's own proven
+// shape: real tsc compiles a mod's single `.manifest.tsx` file, the
+// compiled output is loaded via MinUI's shared, proven requireCompiled(),
+// and the default-exported <ManifestSet> node is walked through
+// manifestBuilder.js's real, declarative emission backend.
 "use strict";
 
 const fs = require("fs");

@@ -40,7 +40,7 @@ class EntityBuilder {
         this.environmentSensorTriggers.push(...triggers);
     }
 
-    /** @returns {object} the real, final `minecraft:entity` document. */
+    /** @returns {object} the real, final `minecraft:entity` (BP) document. */
     toJSON(identifier, { spawnable = false, summonable = true, experimental = false } = {}) {
         const components = { ...this.components };
         if (this.environmentSensorTriggers.length > 0) {
@@ -62,6 +62,31 @@ class EntityBuilder {
         if (Object.keys(this.events).length > 0) doc["minecraft:entity"].events = this.events;
         return doc;
     }
+}
+
+// Real, standing rule (see the top-level demand this enforces): OpenRock
+// must never be able to compile hand-rolled, native Bedrock JSON - every
+// real document an entity needs, BP behavior AND RP visual alike, has to
+// be genuinely authorable through this one DSL. Building the real
+// `minecraft:client_entity` document HERE (from <Entity>'s own real,
+// confirmed-via-live-research visual props) is what actually closes that
+// gap - before this, a mod still had to hand-author `entity/<name>.json`
+// under a raw rpOverlayDir, the exact loophole the "no native compiling"
+// rule exists to close. Returns null when the author gave no real visual
+// props at all - a real, deliberate choice (a summon-only helper entity
+// with no client presence), never a required document.
+function buildClientEntityDoc(identifier, attrs) {
+    const { materials, textures, geometry, renderControllers, spawnEgg, enableAttachables, hideArmor } = attrs;
+    if (!materials && !textures && !geometry && !renderControllers && !spawnEgg) return null;
+    const description = { identifier };
+    if (materials) description.materials = materials;
+    if (textures) description.textures = textures;
+    if (geometry) description.geometry = geometry;
+    if (renderControllers) description.render_controllers = renderControllers;
+    if (spawnEgg) description.spawn_egg = spawnEgg;
+    if (enableAttachables !== undefined) description.enable_attachables = enableAttachables;
+    if (hideArmor !== undefined) description.hide_armor = hideArmor;
+    return { format_version: "1.16.0", "minecraft:client_entity": { description } };
 }
 
 // A minimal sink used only for a <ComponentGroup>'s own children - real
@@ -121,16 +146,19 @@ function emitNode(node, sink) {
 
 /**
  * The real top-level entry point: takes an `<Entity>` root node (from the
- * JSX authoring layer, M1) and produces the real, final Bedrock entity
- * JSON document.
+ * JSX authoring layer, M1) and produces the real, final Bedrock document(s)
+ * - the BP behavior document always, the RP client_entity visual document
+ * only when the author gave real visual props (see buildClientEntityDoc()).
  * @param {object} entityNode - a real `{tag:"Entity", attrs, children}` node.
- * @returns {object} the real `minecraft:entity` document.
+ * @returns {{bp: object, rp: object|null}}
  */
 function buildEntity(entityNode) {
     if (entityNode.tag !== "Entity") throw new Error(`EntityBuilder: buildEntity() requires a real <Entity> root node, got tag "${entityNode.tag}"`);
     const builder = new EntityBuilder();
     for (const child of entityNode.children) emitNode(child, builder);
-    return builder.toJSON(entityNode.attrs.identifier, entityNode.attrs);
+    const bp = builder.toJSON(entityNode.attrs.identifier, entityNode.attrs);
+    const rp = buildClientEntityDoc(entityNode.attrs.identifier, entityNode.attrs);
+    return { bp, rp };
 }
 
-module.exports = { EntityBuilder, buildEntity, registerTagHandler, TAG_HANDLERS };
+module.exports = { EntityBuilder, buildEntity, buildClientEntityDoc, registerTagHandler, TAG_HANDLERS };

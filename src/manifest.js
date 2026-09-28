@@ -126,18 +126,26 @@ function validateManifest(manifest) {
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
-        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl", "manifestDsl"]) {
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl", "manifestDsl", "blockDsl", "itemDsl"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
-        // entityDsl (OR-Track M): a directory of real *.entity.tsx files,
-        // compiled via src/entityDsl/entityCompiler.js into real Bedrock
-        // entity JSON at build time - the DSL replacement for hand-writing
-        // entities/*.json directly (still supported via bpOverlayDir for
-        // anything not yet authored through the DSL).
-        // manifestDsl (OR-Track O): a single real *.manifest.tsx file,
-        // compiled via src/manifestDsl/manifestCompiler.js into a real
-        // manifest.json override/extension document, merged onto
-        // buildManifests()'s own generated bp/rp manifest.json.
+        // entityDsl (Crystal Manifest-Entity, OR-Track M): a directory of
+        // real *.entity.tsx files, compiled via
+        // src/entityDsl/entityCompiler.js into real Bedrock entity JSON at
+        // build time - the DSL replacement for hand-writing entities/*.json
+        // directly (still supported via bpOverlayDir for anything not yet
+        // authored through the DSL).
+        // manifestDsl (Crystal Manifest, OR-Track O): a single real
+        // *.manifest.tsx file, compiled via
+        // src/manifestDsl/manifestCompiler.js into a real manifest.json
+        // override/extension document, merged onto buildManifests()'s own
+        // generated bp/rp manifest.json.
+        // blockDsl (Crystal Manifest-Block, OR-Track M4): a directory of
+        // real *.block.tsx files, compiled via src/blockDsl/blockCompiler.js
+        // into real Bedrock block JSON - same real pattern as entityDsl.
+        // itemDsl (Crystal Manifest-Item, OR-Track M5): a directory of real
+        // *.item.tsx files, compiled via src/itemDsl/itemCompiler.js into
+        // real Bedrock item JSON - same real pattern as entityDsl.
         // scriptEntry: this package's own real in-game script entry -
         // esbuild bundles the ROOT mod's own entry for real (resolving
         // cross-package bare-specifier imports via each dependency's own

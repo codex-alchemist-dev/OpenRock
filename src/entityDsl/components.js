@@ -41,6 +41,20 @@ function Entity(props) {
             spawnable: props.spawnable ?? false,
             summonable: props.summonable ?? true,
             experimental: props.experimental ?? false,
+            // Real RP client_entity visual fields (learn.microsoft.com's
+            // own confirmed minecraft:client_entity description shape) -
+            // giving any of these produces a real RP document too (see
+            // entityBuilder.js's buildClientEntityDoc()), so a mod never
+            // needs to hand-author entity/<name>.json to give an entity a
+            // real visual - the whole point of the "no native compiling"
+            // rule this closes the last real gap in.
+            materials: props.materials,
+            textures: props.textures,
+            geometry: props.geometry,
+            renderControllers: props.renderControllers,
+            spawnEgg: props.spawnEgg,
+            enableAttachables: props.enableAttachables,
+            hideArmor: props.hideArmor,
         },
         children: props.children ?? [],
         line: 0,

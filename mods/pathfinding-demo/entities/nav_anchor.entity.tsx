@@ -5,7 +5,13 @@ import { Entity, TypeFamily, Health, CollisionBox, Pushable, Physics, Scale, Raw
 // spawns and tags as a real follow_mob target - authored through the entity
 // DSL, replacing the hand-written nav_anchor.json.
 export default (
-    <Entity identifier="prd:nav_anchor" summonable>
+    <Entity
+        identifier="prd:nav_anchor" summonable
+        materials={{ default: "zombie" }}
+        textures={{ default: "textures/entity/zombie/zombie" }}
+        geometry={{ default: "geometry.zombie" }}
+        renderControllers={["controller.render.zombie"]}
+    >
         <TypeFamily family={["prd_nav_anchor"]} />
         <Health value={1} />
         <CollisionBox width={0.1} height={0.1} />

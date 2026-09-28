@@ -1,8 +1,10 @@
 # Multi-frontend compiler shape (OR-Track P)
 
-OpenRock's real script build today is a single frontend (TypeScript/JavaScript
-authoring against `@openrock/*` libraries) compiled by a single, already-shared
-backend: `buildPipeline.js`'s `bundleScripts()`, a real `esbuild` bundle that
+OpenRock's real script build today is a single frontend - real name
+**Crystal JS**, see [`docs/crystal.md`](./crystal.md) for the full naming
+rationale (TypeScript/JavaScript authoring against `@openrock/*`
+libraries) compiled by a single, already-shared backend:
+`buildPipeline.js`'s `bundleScripts()`, a real `esbuild` bundle that
 resolves cross-package bare-specifier imports via each dependency's declared
 entry file and leaves Bedrock's own `@minecraft/*` modules external.
 

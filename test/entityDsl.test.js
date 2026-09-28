@@ -39,8 +39,8 @@ const REAL_NAV_TEST = path.join(FIXTURE_DIR, "original-hand-written-nav_test.jso
 
 test("compileEntityDsl: a real .entity.tsx compiles through real tsc + EntityBuilder to a genuine Bedrock entity document", () => {
     const output = compileEntityDsl(FIXTURE_DIR);
-    assert.ok(output["entities/nav_test.json"], "expected a real entities/nav_test.json output key");
-    const doc = output["entities/nav_test.json"];
+    assert.ok(output.bp["entities/nav_test.json"], "expected a real entities/nav_test.json output key");
+    const doc = output.bp["entities/nav_test.json"];
     assert.strictEqual(doc.format_version, "1.20.0");
     assert.strictEqual(doc["minecraft:entity"].description.identifier, "prd:nav_test");
     assert.strictEqual(doc["minecraft:entity"].description.is_spawnable, true);
@@ -48,7 +48,7 @@ test("compileEntityDsl: a real .entity.tsx compiles through real tsc + EntityBui
 
 test("compileEntityDsl: <Pathfinding slots={5}/> produces the SAME real component_groups/events/environment_sensor as the hand-written, real-BDS-verified nav_test.json - proof it calls the real generateNavSlots(), not a reimplementation", () => {
     const output = compileEntityDsl(FIXTURE_DIR);
-    const dslDoc = output["entities/nav_test.json"]["minecraft:entity"];
+    const dslDoc = output.bp["entities/nav_test.json"]["minecraft:entity"];
     const realDoc = JSON.parse(fs.readFileSync(REAL_NAV_TEST, "utf8"))["minecraft:entity"];
 
     assert.deepStrictEqual(dslDoc.component_groups, realDoc.component_groups, "component_groups must match byte-for-byte");
@@ -62,7 +62,7 @@ test("compileEntityDsl: <Pathfinding slots={5}/> produces the SAME real componen
 
 test("compileEntityDsl: typed components (Health, Movement, CollisionBox, etc.) produce the real, correct Bedrock component shapes", () => {
     const output = compileEntityDsl(FIXTURE_DIR);
-    const components = output["entities/nav_test.json"]["minecraft:entity"].components;
+    const components = output.bp["entities/nav_test.json"]["minecraft:entity"].components;
     assert.deepStrictEqual(components["minecraft:health"], { value: 20, max: 20 });
     assert.deepStrictEqual(components["minecraft:movement"], { value: 0.25 });
     assert.deepStrictEqual(components["minecraft:collision_box"], { width: 0.6, height: 1.8 });
@@ -71,7 +71,7 @@ test("compileEntityDsl: typed components (Health, Movement, CollisionBox, etc.) 
 });
 
 test("compileEntityDsl: a mod with no entity DSL directory at all returns an empty output, not an error", () => {
-    assert.deepStrictEqual(compileEntityDsl(path.join(__dirname, "fixtures", "does-not-exist")), {});
+    assert.deepStrictEqual(compileEntityDsl(path.join(__dirname, "fixtures", "does-not-exist")), { bp: {}, rp: {} });
 });
 
 test("compileEntityDsl (OR-Track Q6): an unchanged directory returns the SAME cached output object - real tsc is skipped, not just fast", () => {
@@ -98,11 +98,11 @@ test("compileEntityDsl (OR-Track Q6): editing a real .entity.tsx file produces a
     fs.writeFileSync(srcPath, src.replace(/\.\.\/\.\.\/\.\.\/src/g, absSrcDir));
 
     const before = compileEntityDsl(workDir);
-    assert.strictEqual(before["entities/nav_test.json"]["minecraft:entity"].components["minecraft:health"].value, 20);
+    assert.strictEqual(before.bp["entities/nav_test.json"]["minecraft:entity"].components["minecraft:health"].value, 20);
 
     fs.writeFileSync(srcPath, src.replace("<Health value={20} />", "<Health value={7} />"));
     const after = compileEntityDsl(workDir);
-    assert.strictEqual(after["entities/nav_test.json"]["minecraft:entity"].components["minecraft:health"].value, 7, "a real source edit must be picked up, not masked by the cache");
+    assert.strictEqual(after.bp["entities/nav_test.json"]["minecraft:entity"].components["minecraft:health"].value, 7, "a real source edit must be picked up, not masked by the cache");
     assert.notStrictEqual(before, after);
 
     fs.rmSync(workDir, { recursive: true, force: true });

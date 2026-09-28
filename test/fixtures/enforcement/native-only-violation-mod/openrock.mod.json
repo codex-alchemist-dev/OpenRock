@@ -1,0 +1,21 @@
+{
+  "openrockVersion": 1,
+  "kind": "mod",
+  "name": "native-only-violation-mod",
+  "version": "0.1.0",
+  "namespace": "nov",
+  "packs": {
+    "behavior": {
+      "folder": "Native Only Violation B",
+      "uuid": "9a1c1a1e-1111-4a11-9a11-111111111111",
+      "dataModuleUuid": "9a1c1a1e-2222-4a11-9a11-111111111111",
+      "scriptModuleUuid": "9a1c1a1e-3333-4a11-9a11-111111111111"
+    },
+    "resource": {
+      "folder": "Native Only Violation R",
+      "uuid": "9a1c1a1e-4444-4a11-9a11-111111111111",
+      "moduleUuid": "9a1c1a1e-5555-4a11-9a11-111111111111"
+    }
+  },
+  "content": { "bpOverlayDir": "bp" }
+}

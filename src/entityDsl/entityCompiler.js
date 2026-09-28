@@ -1,9 +1,11 @@
-// OpenRock entity DSL - the real compiler entry point (OR-Track M1),
-// mirroring MinUI's own proven screenCompiler.js exactly: real tsc compiles
-// a mod's `.entity.tsx` files, the compiled output is loaded as an
-// ordinary Node module (requireCompiled(), shared with MinUI - never a
-// second implementation), and each file's default-exported `<Entity>` node
-// is walked through entityBuilder.js's real, proven emission backend.
+// OpenRock entity DSL, real name "Crystal Manifest-Entity" (see
+// docs/crystal.md for the full naming rationale) - the real compiler entry
+// point (OR-Track M1), mirroring MinUI's own proven screenCompiler.js
+// exactly: real tsc compiles a mod's `.entity.tsx` files, the compiled
+// output is loaded as an ordinary Node module (requireCompiled(), shared
+// with MinUI - never a second implementation), and each file's default-
+// exported `<Entity>` node is walked through entityBuilder.js's real,
+// proven emission backend.
 "use strict";
 
 const fs = require("fs");
@@ -11,6 +13,59 @@ const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildEntity } = require("./entityBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
+const { walk } = require("../fsTree.js");
+
+// Real per-entity asset co-location (OR-Track M6, per the user's own
+// explicit standing architectural rule: OpenRock's own mod format is ONE
+// real directory per real thing - unlike native Bedrock, which splits
+// behavior and resource into two separate packs/folders entirely).
+// Alongside "<shortName>.entity.tsx", a real sibling directory literally
+// named "<shortName>/" can hold that entity's own textures (and, as this
+// grows, models/PBR maps) - its ENTIRE contents are copied verbatim into
+// the real Bedrock RP path "textures/entity/<shortName>/", so a real
+// Vibrant Visuals PBR set (base.png + base_normal.png + base_mer.png,
+// Bedrock's own real sibling-file convention - already naturally
+// "one folder per subject" once you look at its real file layout) just
+// works by dropping all of them in the one folder, no per-file DSL
+// bookkeeping. If the author didn't already give `<Entity textures=.../>`
+// explicitly, and a file matching the entity's own short name exists in
+// that folder (a real, simple, discoverable "the default texture is named
+// after you" convention), textures.default is auto-derived - the whole
+// point being an author never hand-writes a Bedrock RP path string at all.
+const TEXTURE_EXTENSIONS = new Set([".png", ".tga"]);
+
+function collectEntityAssets(entityDslDir, shortName) {
+    const assetDir = path.join(entityDslDir, shortName);
+    if (!fs.existsSync(assetDir) || !fs.statSync(assetDir).isDirectory()) return { rpFiles: {}, defaultTexturePath: null };
+    const rpFiles = {};
+    let defaultTexturePath = null;
+    for (const rel of walk(assetDir)) {
+        const outRel = `textures/entity/${shortName}/${rel}`;
+        rpFiles[outRel] = fs.readFileSync(path.join(assetDir, rel));
+        const ext = path.extname(rel);
+        const base = path.basename(rel, ext);
+        if (TEXTURE_EXTENSIONS.has(ext) && base === shortName) {
+            defaultTexturePath = outRel.slice(0, -ext.length); // Bedrock's own real convention: reference the path WITHOUT its extension
+        }
+    }
+    return { rpFiles, defaultTexturePath };
+}
+
+// Every real file under every immediate subdirectory of entityDslDir
+// (excluding the generated dist output) is a potential per-entity asset -
+// folded into the real Q6 compile-cache signature below, so editing JUST a
+// texture (no *.entity.tsx change at all) still invalidates the cache
+// correctly instead of serving stale asset bytes forever.
+function collectAllAssetSourcePaths(entityDslDir) {
+    const paths = [];
+    if (!fs.existsSync(entityDslDir)) return paths;
+    for (const entry of fs.readdirSync(entityDslDir, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name === ".entity-dsl-dist") continue;
+        const assetDir = path.join(entityDslDir, entry.name);
+        for (const rel of walk(assetDir)) paths.push(path.join(assetDir, rel));
+    }
+    return paths;
+}
 
 const TEMPLATE_TSCONFIG = path.join(__dirname, "tsconfig.template.json");
 // This DSL's own shared runtime files - part of every compile's real
@@ -50,16 +105,19 @@ function findCompiledFile(dir, filename) {
  * @param {object} [opts]
  * @param {string} [opts.outDir] - where tsc writes real compiled `.js`
  *   output; defaults to a `.entity-dsl-dist` directory next to `entityDslDir`.
- * @returns {Record<string, object>} outputPath (relative, e.g.
- *   "entities/nav_test.json") -> the real, final Bedrock entity document.
+ * @returns {{bp: Record<string, object>, rp: Record<string, object>}} - bp
+ *   keys look like "entities/nav_test.json" (the real behavior document,
+ *   always present); rp keys look like "entity/nav_test.json" (the real
+ *   client_entity visual document, only when the author gave real visual
+ *   props on `<Entity>` - see entityBuilder.js's buildClientEntityDoc()).
  */
 function compileEntityDsl(entityDslDir, { outDir } = {}) {
-    if (!fs.existsSync(entityDslDir)) return {};
+    if (!fs.existsSync(entityDslDir)) return { bp: {}, rp: {} };
     const sourceFiles = fs.readdirSync(entityDslDir).filter(f => /\.entity\.tsx?$/.test(f));
-    if (sourceFiles.length === 0) return {};
+    if (sourceFiles.length === 0) return { bp: {}, rp: {} };
 
     const sourceAbsPaths = sourceFiles.map(f => path.join(entityDslDir, f));
-    const signature = signatureForFiles([...sourceAbsPaths, ...RUNTIME_FILES]);
+    const signature = signatureForFiles([...sourceAbsPaths, ...RUNTIME_FILES, ...collectAllAssetSourcePaths(entityDslDir)]);
     const cacheKey = `${entityDslDir}::${outDir ?? ""}`; // outDir is part of the real cache identity - a different outDir needs a real recompile, never a stale cached path
 
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
@@ -78,7 +136,8 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
             fs.rmSync(tsconfigPath, { force: true }); // a real, generated build artifact - never left behind as a stray file
         }
 
-        const output = {};
+        const bp = {};
+        const rp = {};
         for (const sourceFile of sourceFiles) {
             const baseName = sourceFile.replace(/\.entity\.tsx?$/, "");
             const compiledPath = findCompiledFile(realOutDir, `${baseName}.entity.js`);
@@ -90,9 +149,35 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
             }
             const identifier = entityNode.attrs.identifier;
             const shortName = identifier.includes(":") ? identifier.split(":")[1] : identifier;
-            output[`entities/${shortName}.json`] = buildEntity(entityNode);
+
+            // Real per-entity asset co-location (OR-Track M6) - collect
+            // real texture files from a real sibling "<shortName>/" folder
+            // BEFORE building the client_entity doc, so an auto-derived
+            // default texture path can be injected into the SAME node
+            // buildEntity() sees (never a second, drifting code path for
+            // "what textures does this entity have").
+            const { rpFiles, defaultTexturePath } = collectEntityAssets(entityDslDir, shortName);
+            let effectiveNode = entityNode;
+            if (!entityNode.attrs.textures && defaultTexturePath) {
+                effectiveNode = { ...entityNode, attrs: { ...entityNode.attrs, textures: { default: defaultTexturePath } } };
+            }
+
+            const { bp: bpDoc, rp: rpDoc } = buildEntity(effectiveNode);
+            bp[`entities/${shortName}.json`] = bpDoc;
+            // Real Bedrock convention, confirmed: BP entity documents live
+            // under "entities/" (plural); RP client_entity documents live
+            // under "entity/" (SINGULAR) - a real, easy-to-miss asymmetry
+            // (pathfinding-demo's own old hand-rolled rp/entities/ overlay
+            // got this wrong before this migration, a real latent bug this
+            // DSL now gets right by construction).
+            if (rpDoc) rp[`entity/${shortName}.json`] = rpDoc;
+            // Real texture (and, as this grows, model/PBR) files, copied
+            // verbatim - real Buffer values, not JSON documents (see
+            // buildPipeline.js's DIRECTORY_DSLS consumption, which checks
+            // Buffer.isBuffer() before deciding whether to JSON.stringify).
+            Object.assign(rp, rpFiles);
         }
-        return output;
+        return { bp, rp };
     });
 }
 

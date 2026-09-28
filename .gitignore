@@ -4,3 +4,5 @@ dist/
 *.log
 .entity-dsl-dist/
 .manifest-dsl-dist/
+.block-dsl-dist/
+.item-dsl-dist/
