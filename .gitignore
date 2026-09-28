@@ -3,3 +3,4 @@ build/
 dist/
 *.log
 .entity-dsl-dist/
+.manifest-dsl-dist/

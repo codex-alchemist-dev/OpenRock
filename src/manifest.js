@@ -126,7 +126,7 @@ function validateManifest(manifest) {
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
-        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl"]) {
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl", "manifestDsl"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
         // entityDsl (OR-Track M): a directory of real *.entity.tsx files,
@@ -134,6 +134,10 @@ function validateManifest(manifest) {
         // entity JSON at build time - the DSL replacement for hand-writing
         // entities/*.json directly (still supported via bpOverlayDir for
         // anything not yet authored through the DSL).
+        // manifestDsl (OR-Track O): a single real *.manifest.tsx file,
+        // compiled via src/manifestDsl/manifestCompiler.js into a real
+        // manifest.json override/extension document, merged onto
+        // buildManifests()'s own generated bp/rp manifest.json.
         // scriptEntry: this package's own real in-game script entry -
         // esbuild bundles the ROOT mod's own entry for real (resolving
         // cross-package bare-specifier imports via each dependency's own

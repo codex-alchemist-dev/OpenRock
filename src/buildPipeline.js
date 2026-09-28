@@ -51,6 +51,8 @@ const semver = require("./semver.js");
 const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
+const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
+const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -331,6 +333,24 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
     }
 
     const built = buildManifests(modManifest);
+
+    // OR-Track O (made real): the root mod's own manifest DSL file (if any)
+    // compiles to real bp/rp manifest.json override documents, merged onto
+    // buildManifests()'s own generated output - only the ROOT manifest's
+    // content.manifestDsl is honored (a dependency library doesn't
+    // contribute to the mod's own single manifest.json), matching how
+    // scripts/entities work per-package but a manifest is one-per-pack.
+    const rootManifestDsl = modManifest.content?.manifestDsl;
+    if (rootManifestDsl) {
+        const manifestDslAbs = path.resolve(dir, rootManifestDsl);
+        const manifestOutput = compileManifestDsl(manifestDslAbs);
+        if (manifestOutput) {
+            if (built.bp) built.bp = mergeManifestDoc(built.bp, manifestOutput.bp);
+            else if (manifestOutput.bp) throw new Error(`"${modManifest.name}": manifest DSL declares a <Behavior> pack, but this mod has no real behavior pack (packs.behavior === false)`);
+            built.rp = mergeManifestDoc(built.rp, manifestOutput.rp);
+        }
+    }
+
     if (hasBehaviorPack) {
         const resolveMap = new Map();
         // OR-Track N: every collected package that declares a real
