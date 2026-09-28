@@ -28,7 +28,14 @@ function test(name, fn) {
 }
 
 const FIXTURE_DIR = path.join(__dirname, "fixtures", "entity-dsl-pilot");
-const REAL_NAV_TEST = path.join(__dirname, "..", "mods", "pathfinding-demo", "bp", "entities", "nav_test.json");
+// The ORIGINAL hand-written nav_test.json, preserved here as a permanent
+// fixture (recovered from git history) - the real mod itself has since
+// migrated to the entity DSL for real (mods/pathfinding-demo/entities/
+// nav_test.entity.tsx), so this frozen copy is what proves byte-identical
+// equivalence against the version that was actually verified against a
+// real, booted Bedrock Dedicated Server, independent of the live mod's
+// own ongoing changes.
+const REAL_NAV_TEST = path.join(FIXTURE_DIR, "original-hand-written-nav_test.json");
 
 test("compileEntityDsl: a real .entity.tsx compiles through real tsc + EntityBuilder to a genuine Bedrock entity document", () => {
     const output = compileEntityDsl(FIXTURE_DIR);

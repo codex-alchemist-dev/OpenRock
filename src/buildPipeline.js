@@ -48,6 +48,7 @@ const { loadManifestFile } = require("./manifest.js");
 const { topoSort } = require("./libLoader.js");
 const { walk, writeTree, MERGED_FILES, mergeRegistry } = require("./fsTree.js");
 const semver = require("./semver.js");
+const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -269,6 +270,18 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
                 if (!map) throw new Error(`"${manifest.name}": content.datagenEntry produced "${side}" output, but this package has no ${side === "bp" ? "behavior" : "resource"} pack`);
                 for (const [outRel, obj] of Object.entries(result[side])) putJson(map, fill(outRel, vars), obj);
             }
+        }
+
+        // content.entityDsl (OR-Track M, made real): a directory of real
+        // *.entity.tsx files, compiled via src/entityDsl/entityCompiler.js
+        // (real tsc + the real EntityBuilder emission backend) into real
+        // Bedrock entity JSON, merged into the pack the same way
+        // datagenEntry's output is - the DSL replacement for hand-writing
+        // entities/*.json directly under bpOverlayDir.
+        if (hasBehaviorPack && content.entityDsl) {
+            const entityDslAbs = path.resolve(entryDir, content.entityDsl);
+            const entityOutput = compileEntityDsl(entityDslAbs);
+            for (const [outRel, doc] of Object.entries(entityOutput)) putJson(bp, fill(outRel, vars), doc);
         }
 
         if (hasBehaviorPack && content.scriptsDir) scriptEntries.push({ manifest, dir: entryDir });

@@ -20,6 +20,6 @@
       "moduleUuid": "e870f319-0180-4400-9d4d-8433b39cfa07"
     }
   },
-  "content": { "scriptsDir": "scripts", "bpOverlayDir": "bp", "rpOverlayDir": "rp" },
+  "content": { "scriptsDir": "scripts", "entityDsl": "entities", "rpOverlayDir": "rp" },
   "engine": { "minEngineVersion": [1, 21, 0], "scriptModules": { "@minecraft/server": "2.0.0" } }
 }

@@ -107,6 +107,11 @@ function Pushable(props) {
     });
 }
 
+function Scale(props) {
+    requireNumber(props.value, "<Scale value>");
+    return rawComponent("minecraft:scale", { value: props.value });
+}
+
 function TypeFamily(props) {
     if (!Array.isArray(props.family) || props.family.length === 0) throw new Error("OpenRock entity DSL: <TypeFamily family> requires a real, non-empty array");
     return rawComponent("minecraft:type_family", { family: props.family });
@@ -127,6 +132,6 @@ function Pathfinding(props) {
 
 module.exports = {
     Entity, ComponentGroup, RawComponent,
-    Health, Movement, CollisionBox, NavigationWalk, Physics, Pushable, TypeFamily,
+    Health, Movement, CollisionBox, NavigationWalk, Physics, Pushable, TypeFamily, Scale,
     Pathfinding,
 };
