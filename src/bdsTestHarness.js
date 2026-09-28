@@ -32,6 +32,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { writeTree } = require("./fsTree.js");
+const { installBds, defaultCacheRoot } = require("../tools/bds/install.js");
 
 const TEST_WORLD_NAME = "openrock-test";
 
@@ -60,6 +61,46 @@ function findBdsInstance(dir, openrockRoot) {
     if (hasBinary(candidate)) return candidate;
 
     return null;
+}
+
+/**
+ * Scans OR-Track Q1's real auto-install cache (tools/bds/install.js's
+ * defaultCacheRoot()) for a version already installed there - the fallback
+ * this project's Q1 design explicitly promises ("if postinstall was
+ * skipped or blocked... build/check fall back to installing on first use
+ * instead of hard-failing"). Picks the most recently installed version
+ * (mtime, not semver-parsed - a real installed version is always a real,
+ * meaningful choice regardless of ordering).
+ */
+function findAutoInstalledBds(cacheRoot = defaultCacheRoot()) {
+    if (!fs.existsSync(cacheRoot)) return null;
+    const exeNames = ["bedrock_server.exe", "bedrock_server"];
+    let best = null;
+    for (const entry of fs.readdirSync(cacheRoot, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const dir = path.join(cacheRoot, entry.name);
+        if (!exeNames.some(exe => fs.existsSync(path.join(dir, exe)))) continue;
+        const mtime = fs.statSync(dir).mtimeMs;
+        if (!best || mtime > best.mtime) best = { dir, mtime };
+    }
+    return best?.dir ?? null;
+}
+
+/**
+ * The real Q1 resolution chain: an explicit/env/bds-test instance first
+ * (unchanged, synchronous, zero network), then a real already-auto-
+ * installed cache entry, then - only as a last resort - a real, live
+ * install (network download, the one genuinely slow path here). Never
+ * triggers a real install if a usable instance already exists anywhere.
+ * @returns {Promise<string>} a real BDS directory - throws if every real
+ *   resolution path (including a live install attempt) fails.
+ */
+async function resolveOrInstallBdsInstance(dir, openrockRoot, { autoInstall = true } = {}) {
+    const existing = findBdsInstance(dir, openrockRoot) ?? findAutoInstalledBds();
+    if (existing) return existing;
+    if (!autoInstall) throw new Error("bdsTestHarness: no real BDS instance found and auto-install is disabled");
+    const { installDir } = await installBds({});
+    return installDir;
 }
 
 /**
@@ -193,14 +234,21 @@ function bootAndCollect(bdsDir, { timeoutMs = 15000 } = {}) {
  *   resolved via findBdsInstance().
  * @param {string} [opts.openrockRoot]
  * @param {number} [opts.timeoutMs=15000]
+ * @param {boolean} [opts.autoInstall=true] - fall back to a real, live
+ *   OR-Track Q1 install if no BDS instance is found anywhere (explicit,
+ *   env, bds-test convention, or the Q1 auto-install cache). Set false to
+ *   restore the old "fail fast" behavior (e.g. a CI sandbox with no
+ *   network access should never trigger a real download mid-test).
  * @returns {Promise<{ok:boolean, errors:string[], packLoaded:boolean, rawOutput:string, bdsDir:string}>}
  */
-async function runSmokeTest(built, { bdsDir, openrockRoot = path.join(__dirname, ".."), timeoutMs = 15000 } = {}) {
-    const dir = findBdsInstance(bdsDir, openrockRoot);
-    if (!dir) {
+async function runSmokeTest(built, { bdsDir, openrockRoot = path.join(__dirname, ".."), timeoutMs = 15000, autoInstall = true } = {}) {
+    let dir;
+    try {
+        dir = await resolveOrInstallBdsInstance(bdsDir, openrockRoot, { autoInstall });
+    } catch (err) {
         throw new Error(
-            "bdsTestHarness: no real BDS instance found - set OPENROCK_BDS_DIR, pass { bdsDir }, or place one at a sibling \"bds-test\" directory. " +
-            "Use --no-test-server to skip this check."
+            `bdsTestHarness: no real BDS instance found and auto-install failed (${err.message}). ` +
+            "Set OPENROCK_BDS_DIR, pass { bdsDir }, place one at a sibling \"bds-test\" directory, or use --no-test-server to skip this check."
         );
     }
     installIntoBds(dir, built);
@@ -208,4 +256,4 @@ async function runSmokeTest(built, { bdsDir, openrockRoot = path.join(__dirname,
     return { ...result, bdsDir: dir };
 }
 
-module.exports = { findBdsInstance, installIntoBds, bootAndCollect, analyzeOutput, runSmokeTest, TEST_WORLD_NAME };
+module.exports = { findBdsInstance, findAutoInstalledBds, resolveOrInstallBdsInstance, installIntoBds, bootAndCollect, analyzeOutput, runSmokeTest, TEST_WORLD_NAME };

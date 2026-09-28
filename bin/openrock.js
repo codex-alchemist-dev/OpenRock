@@ -26,11 +26,14 @@
 // checking its actual console output for real script/content load errors,
 // the exact mechanism that caught a genuine, reproduced esbuild
 // tree-shaking bug tonight that every Node-side test missed. Requires a
-// real local BDS instance (set OPENROCK_BDS_DIR, or place one at a sibling
-// "bds-test" directory next to this workspace) - if none is found, this is
-// a one-line skip note, never a hard failure (so a machine with no BDS
-// installed can still build). Pass --no-test-server to skip explicitly,
-// e.g. for fast dev-loop iteration.
+// real local BDS instance: explicit OPENROCK_BDS_DIR, a sibling "bds-test"
+// dev-server directory, OR-Track Q1's own real auto-install cache
+// (tools/bds/install.js - populated by `npm install`'s postinstall hook,
+// or installed live on THIS first use if that hook was skipped/blocked) -
+// in that order. Only if every real path (including a live install
+// attempt) fails is this a one-line skip note, never a hard failure (so an
+// offline machine can still build). Pass --no-test-server to skip
+// explicitly, e.g. for fast dev-loop iteration.
 //
 // <modDir> is the folder containing openrock.mod.json (defaults to the
 // current directory). A mod's "library"-type dependencies are resolved
