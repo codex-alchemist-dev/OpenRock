@@ -15,32 +15,51 @@
 // against real Claude Waifus - see the plan's own note on why OR-Track F0
 // carries zero cutover risk.
 //
-// A real architectural question surfaced while writing this, worth stating
-// outright rather than silently working around: `content.scriptsDir` files
-// are copied as OPAQUE BYTES here and only ever referenced by a generated
-// `import "./pkg/file.js";` line in main.js - this pipeline never requires
-// or executes them. That's deliberate and correct for THIS module's job
-// (asset/script bundling), but it means the OR-Track B libraries
-// (kernel.js/libLoader.js/each libs/*/src/register.js) - all written as
-// plain Node CommonJS (`require`/`module.exports`) so they're testable
-// with `node test.js` - have NEVER been shown to actually run inside
-// Minecraft's real script engine, which only supports ES modules
-// (`import`/`export`), not arbitrary `require()`. Whether/how OR-Track B's
-// kernel system gets ported to (or invoked from) real in-game ES-module
-// code is genuinely unresolved and is OR-Track D/J's problem once
-// OpenChara's real in-game runtime actually consumes these libraries - not
-// assumed solved here, and not blocking this pipeline's own real,
-// testable job of bundling manifest-declared content files correctly.
+// content.scriptsDir is REAL esbuild bundling (bundleScripts()/
+// resolveScriptEntry() below), not a file copy - the root mod's own script
+// entry is the real bundling entry point, cross-package bare-specifier
+// imports (`import { X } from "build-lib";`) resolve to each dependency's
+// own declared entry file via a custom esbuild resolve plugin, and
+// Bedrock's own built-in modules (@minecraft/server etc.) stay external.
+// This is what "mod PACKAGER" is actually supposed to mean - compiling a
+// real dependency graph down to one bundled output, not copying
+// already-Bedrock-format files around with placeholder substitution
+// (which is still exactly what content.bpOverlayDir/rpOverlayDir do, and
+// correctly so - those are genuinely static assets/JSON with nothing to
+// compile, not code).
+//
+// One real architectural question remains open, worth stating outright:
+// the OR-Track B libraries (kernel.js/libLoader.js/each libs/*/src/
+// register.js) are plain Node CommonJS (`require`/`module.exports`), used
+// for BUILD-TIME kernel registration (a library's `register(kernel, ctx)`
+// entry, resolved and called by libLoader.js during collectEntries/
+// buildMod itself) - a completely separate mechanism from the real
+// in-game ES-module scripts this file now genuinely bundles. Whether/how
+// the kernel's own build-time registration data (registries, capabilities,
+// etc.) gets surfaced to or consumed by in-game code is a different,
+// still-open question this file doesn't need to answer to do its own real
+// job (bundling manifest-declared in-game scripts) correctly.
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
+const esbuild = require("esbuild");
 const { loadManifestFile } = require("./manifest.js");
 const { topoSort } = require("./libLoader.js");
 const { walk, writeTree, MERGED_FILES, mergeRegistry } = require("./fsTree.js");
 const semver = require("./semver.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
+
+// Bedrock's own built-in script modules - provided by the game engine at
+// runtime, never bundled. esbuild's `external` marks these as "leave the
+// import statement alone, don't try to resolve/bundle it" - the same
+// treatment a real bundler gives any genuine runtime-provided module.
+const BEDROCK_BUILTIN_MODULES = [
+    "@minecraft/server", "@minecraft/server-ui", "@minecraft/server-net",
+    "@minecraft/server-gametest", "@minecraft/server-admin", "@minecraft/server-editor",
+    "@minecraft/debug-utilities", "@minecraft/common", "@minecraft/math", "@minecraft/vanilla-data",
+];
 
 /** True for a mod, or a hybrid library that declares its own "packs" (OR-Track K). */
 function isBuildablePackage(manifest) {
@@ -49,12 +68,6 @@ function isBuildablePackage(manifest) {
 
 function fill(text, vars) {
     return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
-}
-
-// Turns a package name ("@openrock/registries", "openchara") into a
-// filesystem/import-path-safe folder name.
-function scriptFolderName(name) {
-    return name.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 /**
@@ -182,9 +195,36 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
 
     const ordered = topoSort(collectEntries(modManifest, dir, { vendorDir, libraryDirs }));
 
+    // @openrock/datagen's real builder functions, resolved once (from
+    // whichever entry in `ordered` actually declares it - a package that
+    // wants datagen support depends on it for real, via a normal
+    // dependsOn entry, so it's already collected by the time this runs)
+    // and reused for every datagenEntry script below.
+    let cachedDatagenApi;
+    function datagenApi() {
+        if (cachedDatagenApi) return cachedDatagenApi;
+        const entry = ordered.find(e => e.manifest.name === "@openrock/datagen");
+        if (!entry || !entry.manifest.provides?.api) {
+            throw new Error(`content.datagenEntry needs a real "@openrock/datagen" dependency (dependsOn) - none found in the resolved dependency tree`);
+        }
+        const register = require(path.resolve(entry.dir, entry.manifest.provides.api));
+        cachedDatagenApi = register().api;
+        return cachedDatagenApi;
+    }
+
     const bp = hasBehaviorPack ? new Map() : null;
     const rp = new Map();
     const put = (map, rel, data) => map.set(rel, Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
+    // Shared by both real overlay files AND datagen output below - a JSON
+    // file at a MERGED_FILES path combines with whatever's already there
+    // (another package's own contribution to the same registry file)
+    // instead of one silently clobbering the other.
+    const putJson = (map, outRel, obj) => {
+        if (MERGED_FILES.has(outRel) && map.has(outRel)) {
+            obj = mergeRegistry(JSON.parse(map.get(outRel).toString("utf8")), obj);
+        }
+        put(map, outRel, JSON.stringify(obj, null, 2) + "\n");
+    };
     const scriptEntries = []; // [{packageName, files: ["./scripts/foo/x.js", ...]}], in dependency load order
 
     for (const { manifest, dir: entryDir } of ordered) {
@@ -210,32 +250,124 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
             }
         }
 
-        if (hasBehaviorPack && content.scriptsDir) {
-            const abs = path.join(entryDir, content.scriptsDir);
-            const folder = scriptFolderName(manifest.name);
-            const files = [];
-            for (const rel of walk(abs)) {
-                put(bp, `scripts/${folder}/${rel}`, fs.readFileSync(path.join(abs, rel)));
-                // scriptEntry (OR-Track K), when declared, narrows the
-                // top-level import list to just that one file - every other
-                // .js file is still copied, only reachable via the entry's
-                // OWN relative imports, never separately double-imported.
-                if (rel.endsWith(".js") && (!content.scriptEntry || rel === content.scriptEntry)) files.push(`./${folder}/${rel}`);
+        // content.datagenEntry (OR-Track B2, made real): a build-time-only
+        // Node script, executed HERE (real require(), real JS execution -
+        // this is the whole point, generating data from typed calls
+        // instead of hand-writing JSON), producing { bp: {relPath: obj},
+        // rp: {relPath: obj} } merged into the pack the same way real
+        // overlay files are. Never bundled into the in-game scripts -
+        // that's content.scriptsDir's separate, real-esbuild-bundled job.
+        if (content.datagenEntry) {
+            const entryAbs = path.resolve(entryDir, content.datagenEntry);
+            if (!fs.existsSync(entryAbs)) throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" doesn't exist`);
+            let generate;
+            try { generate = require(entryAbs); } catch (err) { throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" failed to load: ${err.message}`); }
+            if (typeof generate !== "function") throw new Error(`"${manifest.name}": content.datagenEntry "${content.datagenEntry}" must export a function (datagen) => ({ bp, rp })`);
+            const result = generate(datagenApi()) ?? {};
+            for (const [side, map] of [["bp", bp], ["rp", rp]]) {
+                if (!result[side]) continue;
+                if (!map) throw new Error(`"${manifest.name}": content.datagenEntry produced "${side}" output, but this package has no ${side === "bp" ? "behavior" : "resource"} pack`);
+                for (const [outRel, obj] of Object.entries(result[side])) putJson(map, fill(outRel, vars), obj);
             }
-            if (files.length) scriptEntries.push({ packageName: manifest.name, files });
         }
+
+        if (hasBehaviorPack && content.scriptsDir) scriptEntries.push({ manifest, dir: entryDir });
     }
 
     const built = buildManifests(modManifest);
     if (hasBehaviorPack) {
-        const mainLines = ["// GENERATED by OpenRock build - do not edit."];
-        for (const { files } of scriptEntries) for (const f of files) mainLines.push(`import "${f}";`);
-        put(bp, "scripts/main.js", mainLines.join("\n") + "\n");
+        const resolveMap = new Map();
+        for (const { manifest, dir: entryDir } of scriptEntries) {
+            const entryFile = resolveScriptEntry(manifest, entryDir);
+            if (entryFile) resolveMap.set(manifest.name, entryFile);
+        }
+        const rootEntry = resolveMap.get(modManifest.name);
+        if (rootEntry) {
+            const { js, map } = bundleScripts(modManifest, rootEntry, resolveMap);
+            put(bp, "scripts/main.js", js);
+            if (map) put(bp, "scripts/main.js.map", map);
+        } else {
+            put(bp, "scripts/main.js", "// GENERATED by OpenRock build - this mod declares no script entry.\n");
+        }
         put(bp, "manifest.json", JSON.stringify(built.bp, null, 2) + "\n");
     }
     put(rp, "manifest.json", JSON.stringify(built.rp, null, 2) + "\n");
 
     return { bp, rp, manifest: modManifest };
+}
+
+// Resolves which file, if any, is this package's own real in-game script
+// entry - the file (a) esbuild actually bundles FROM for the root mod
+// being built, and (b) another package's `import "pkg-name"` resolves TO.
+// content.scriptEntry names it explicitly; absent that, a conventional
+// "main.js" inside scriptsDir is used if present. Neither existing means
+// this package contributes no scripts (not an error, unless scriptEntry
+// was explicitly declared and genuinely doesn't exist on disk - that's a
+// real manifest mistake worth failing loudly on).
+function resolveScriptEntry(manifest, dir) {
+    const content = manifest.content ?? {};
+    if (!content.scriptsDir) return null;
+    // esbuild's `alias` remapping resolves its VALUE relative to the
+    // process's current working directory unless it's a genuinely absolute
+    // path (confirmed the hard way: a relative value here produced "could
+    // not resolve ... using the alias feature" even though the file
+    // existed) - path.resolve() guarantees an absolute path regardless of
+    // whether `dir` itself was passed in as relative or absolute.
+    const scriptsAbs = path.resolve(dir, content.scriptsDir);
+    if (!fs.existsSync(scriptsAbs)) return null;
+    const entryRel = content.scriptEntry ?? "main.js";
+    const abs = path.join(scriptsAbs, entryRel);
+    if (!fs.existsSync(abs)) {
+        if (content.scriptEntry) throw new Error(`"${manifest.name}": content.scriptEntry "${content.scriptEntry}" doesn't exist under "${content.scriptsDir}"`);
+        return null;
+    }
+    return abs;
+}
+
+// Real ES-module bundling (esbuild) of the root mod's own script entry,
+// resolving cross-package bare-specifier imports (e.g.
+// `import { X } from "build-lib";`) to each dependency's own
+// resolveScriptEntry() file via esbuild's `alias` option - no node_modules
+// tree, no package.json exports map needed, since OpenRock already knows
+// every dependency's real directory from collectEntries(). `alias` (a
+// plain string->string map) is used instead of a custom resolve plugin
+// because esbuild's SYNCHRONOUS build API (buildSync, used throughout this
+// pipeline and every one of its callers - CLI, tests, dev-mode) flatly
+// refuses to run with plugins at all ("Cannot use plugins in synchronous
+// API calls" - a real constraint hit and fixed during implementation, not
+// assumed). Bedrock's own built-in modules stay external (untouched
+// import statements, resolved by the game engine itself at runtime, never
+// bundled). This REPLACES the old copy-every-file-and-generate-a-flat-
+// import-list mechanism - real compilation (dead code elimination, real
+// cross-package resolution, one genuinely bundled output) instead of a
+// file mover pretending to package something.
+// Real source maps (OR-Track C2's debugger depends on this): before this
+// rewrite, content.scriptsDir files were copied byte-for-byte, so the
+// deployed file WAS the original source, 1:1 - no map needed. Real
+// bundling concatenates/transforms multiple files into one, so without a
+// source map, the debugger's line numbers would point at the wrong place
+// in the wrong file. `sourcemap: "linked"` produces a real separate
+// scripts/main.js.map, referenced from main.js via the standard
+// `//# sourceMappingURL=` comment esbuild appends automatically.
+function bundleScripts(rootManifest, entryFile, resolveMap) {
+    const result = esbuild.buildSync({
+        entryPoints: [entryFile],
+        bundle: true,
+        format: "esm",
+        alias: Object.fromEntries(resolveMap),
+        write: false,
+        external: BEDROCK_BUILTIN_MODULES,
+        sourcemap: "linked",
+        outfile: "main.js",
+        logLevel: "silent",
+    });
+    if (result.errors.length) {
+        const detail = result.errors.map(e => `${e.text}${e.location ? ` (${e.location.file}:${e.location.line})` : ""}`).join("\n");
+        throw new Error(`buildMod(): esbuild failed bundling "${rootManifest.name}"'s scripts:\n${detail}`);
+    }
+    const js = result.outputFiles.find(f => f.path.endsWith(".js"));
+    const map = result.outputFiles.find(f => f.path.endsWith(".js.map"));
+    return { js: `// GENERATED by OpenRock build (esbuild) - do not edit.\n${js.text}`, map: map?.text };
 }
 
 /**

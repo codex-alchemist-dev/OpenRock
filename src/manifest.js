@@ -126,19 +126,26 @@ function validateManifest(manifest) {
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
-        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry"]) {
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
-        // scriptEntry (OR-Track K): narrows which file(s) under scriptsDir
-        // the generated main.js actually imports - without it, EVERY .js
-        // file found gets its own top-level import (OR-Phase 0's original
-        // "every content script is imported once" convention, still the
-        // default). A package with real internal module structure (an
-        // entry file that itself imports its own implementation-detail
-        // files) declares scriptEntry so only the entry gets a top-level
-        // import; the rest are still copied, just reached only via the
-        // entry's own relative imports, never double-imported.
+        // scriptEntry: this package's own real in-game script entry -
+        // esbuild bundles the ROOT mod's own entry for real (resolving
+        // cross-package bare-specifier imports via each dependency's own
+        // scriptEntry), so every OTHER package needs one too, to be
+        // resolvable BY NAME from an importing package's own scripts
+        // (buildPipeline.js's resolveScriptEntry()/bundleScripts()).
+        // Defaults to "main.js" under scriptsDir if not set.
         if (c.scriptEntry !== undefined && !c.scriptsDir) throw new Error(`manifest.content.scriptEntry requires "scriptsDir" to be set too`);
+        // datagenEntry (OR-Track B2's "typed builders" half becoming real):
+        // a Node CommonJS script (relative to this manifest's own
+        // directory, NOT bundled into the in-game pack - executed at BUILD
+        // TIME only) exporting `(datagen) => ({ bp: {relPath: obj}, rp: {relPath: obj} })`,
+        // called with @openrock/datagen's real builder functions and
+        // merged into the built pack the same way bpOverlayDir/rpOverlayDir
+        // are - this is what makes "compile data from typed calls instead
+        // of hand-writing JSON" (the original OR-Track B2 ask) real,
+        // instead of just a library of builder functions nothing ever calls.
     }
 }
 

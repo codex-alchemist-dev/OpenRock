@@ -1,3 +1,4 @@
-// Illustrative in-game ES-module content only - see build-lib's own
-// scripts/lib_runtime.js comment for why nothing executes this.
+// Real in-game ES-module content, real esbuild-bundled into this
+// package's own scripts/main.js when built as its own root (OR-Track K's
+// hybrid-library pattern).
 export const HYBRID_MARKER = true;

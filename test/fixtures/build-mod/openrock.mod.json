@@ -20,5 +20,5 @@
       "moduleUuid": "55555555-5555-5555-5555-555555555555"
     }
   },
-  "content": { "scriptsDir": "scripts", "bpOverlayDir": "bp", "rpOverlayDir": "rp" }
+  "content": { "scriptsDir": "scripts", "scriptEntry": "mod_runtime.js", "bpOverlayDir": "bp", "rpOverlayDir": "rp" }
 }

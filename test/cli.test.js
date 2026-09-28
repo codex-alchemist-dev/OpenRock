@@ -37,7 +37,7 @@ function makeStandaloneMod() {
             behavior: { folder: "CLI Test B", uuid: "a1111111-1111-1111-1111-111111111111", dataModuleUuid: "a2222222-2222-2222-2222-222222222222", scriptModuleUuid: "a3333333-3333-3333-3333-333333333333" },
             resource: { folder: "CLI Test R", uuid: "a4444444-4444-4444-4444-444444444444", moduleUuid: "a5555555-5555-5555-5555-555555555555" },
         },
-        content: { scriptsDir: "scripts" },
+        content: { scriptsDir: "scripts", scriptEntry: "main_content.js" },
     }));
     fs.writeFileSync(path.join(modDir, "scripts", "main_content.js"), "export const MARKER = true;\n");
     return modDir;
@@ -55,7 +55,14 @@ test("openrock build: produces a real build/ tree with a correct manifest.json",
     assert.ok(fs.existsSync(manifestPath));
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     assert.strictEqual(manifest.header.uuid, "a1111111-1111-1111-1111-111111111111");
-    assert.ok(fs.existsSync(path.join(modDir, "build", "CLI Test B", "scripts", "main.js")));
+    const mainJsPath = path.join(modDir, "build", "CLI Test B", "scripts", "main.js");
+    assert.ok(fs.existsSync(mainJsPath));
+    // Real content check, not just file existence - a real esbuild bundle
+    // must actually contain the mod's own script content, not just a
+    // placeholder (a silent-content-loss regression was caught exactly
+    // this way while wiring content.scriptEntry through the CLI's own
+    // fixture, which previously only checked existsSync()).
+    assert.match(fs.readFileSync(mainJsPath, "utf8"), /MARKER\s*=\s*true/);
     assert.ok(fs.existsSync(path.join(modDir, "build", "CLI Test R", "manifest.json")));
 });
 

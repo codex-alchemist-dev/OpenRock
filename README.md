@@ -26,6 +26,14 @@ invocations (`test/buildPipeline.test.js`, `test/cli.test.js`) - never
 against real Claude Waifus, so none of this carries any cutover risk. See
 "Build pipeline & CLI" below.
 
+**The build pipeline now genuinely compiles, not just copies**: real
+`esbuild` bundling for scripts (real cross-package resolution, real dead
+code elimination, real source maps) and real `@openrock/datagen`-driven
+data generation. `esbuild` is a real, deliberate dependency - this project
+has no "zero dependencies" rule for its own tooling, only for what actually
+ships in a compiled pack (still true: nothing here adds a runtime
+dependency to the packs OpenRock produces).
+
 The full phased design (manifest shape, library lifecycle, MCLite's
 generalized API, submodule wiring, the OR-Track A-J ecosystem expansion,
 and the migration order with testing checkpoints for every phase) lives in
@@ -242,30 +250,59 @@ zero character/species/quest-specific logic. Given a mod's
    copies its declared `content.bpOverlayDir`/`rpOverlayDir` files into the
    output (with `{{ns}}` filled from that package's own namespace, and
    `fsTree.js`'s `MERGED_FILES` registry-merge for shared files like
-   `item_texture.json` - a library's and a mod's own entries both survive),
-   and its `content.scriptsDir` files into `scripts/<package>/`.
-3. Generates `scripts/main.js` (imports every package's own scripts, in
-   dependency order) and a real BP/RP `manifest.json` from the mod's
+   `item_texture.json` - a library's and a mod's own entries both survive)
+   - genuinely static assets/JSON, nothing to compile, so copying (with
+   template substitution) is the correct, honest thing to do here.
+3. **Real compiles its scripts and data - this is the actual "packager"
+   part.** `content.scriptsDir` is real esbuild bundling
+   (`bundleScripts()`/`resolveScriptEntry()`): the root mod's own
+   `content.scriptEntry` (default `main.js`) is the real bundling entry
+   point, and a cross-package bare-specifier import
+   (`import { X } from "build-lib";`) resolves to that dependency's own
+   declared entry file via esbuild's `alias` option - no node_modules
+   tree, no package.json exports map, since OpenRock already knows every
+   dependency's real directory. Real dead-code elimination too (an unused
+   relative import is genuinely dropped, not just left un-top-level-
+   imported). Bedrock's own built-in modules (`@minecraft/server` etc.)
+   stay external, untouched. A real source map (`scripts/main.js.map`,
+   `esbuild`'s `sourcemap: "linked"`) ships alongside, since a real bundle
+   mixes multiple files' line numbers - OR-Track C2's debugger needs it to
+   point at the right original file. `content.datagenEntry` is the other
+   half: a build-time-only Node script (never bundled into the pack) that
+   calls `@openrock/datagen`'s real typed builders and returns
+   `{ bp: {relPath: obj}, rp: {relPath: obj} }`, merged into the output
+   the same way real overlay files are - "compile data from typed calls
+   instead of hand-writing JSON" (OR-Track B2's original ask), now actually
+   wired up and executed, not just a library of functions nothing calls.
+4. Generates a real BP/RP `manifest.json` from the mod's
    `packs`/`version`/`engine` fields.
-4. `writeTree()` (also `fsTree.js`) writes the result as a diff - only
+5. `writeTree()` (also `fsTree.js`) writes the result as a diff - only
    changed files touched, stale ones removed - the same mechanism
    `dev`'s watch loop and `deploy` both rely on.
 
-**A real, load-bearing open question surfaced while building this** (see
-`buildPipeline.js`'s own header comment for the full writeup): `scriptsDir`
-files are copied as opaque bytes and only ever referenced by a generated
-`import` line - this pipeline never requires or executes them. That's
-correct for ITS job, but it means OR-Track B's kernel/libLoader/library
-system (all plain Node CommonJS, so it's testable with `node test.js`) has
-never been shown to actually run inside Minecraft's real script engine,
-which only supports ES modules. Whether/how that gets bridged is genuinely
-unresolved - OR-Track D/J's problem once OpenChara's real in-game code
-actually consumes these libraries, not assumed solved here.
+**One real, load-bearing open question remains, worth stating outright**
+(see `buildPipeline.js`'s own header comment for the full writeup):
+OR-Track B's kernel/libLoader/library system is plain Node CommonJS
+(`require`/`module.exports`, testable with `node test.js`) used for
+BUILD-TIME kernel registration (a library's `register(kernel, ctx)` entry,
+resolved by `libLoader.js` during `collectEntries`/`buildMod` itself) -
+a completely different mechanism from the real in-game ES-module scripts
+this pipeline now genuinely bundles. Whether/how the kernel's own
+build-time registration data (registries, capabilities, etc.) gets
+surfaced to or consumed by in-game code is a separate, still-open
+question - not the same gap as the one this pass closed (real script/data
+compilation existing at all), and not blocking this pipeline's own job.
 
-Tested against dummy fixture mods/libraries only
-(`test/fixtures/build-lib`, `build-mod`) and via real child-process CLI
-invocations producing a genuine `.mcaddon` ZIP - never against real Claude
-Waifus, so none of OR-Track F0 carries cutover risk.
+Tested against dummy fixture mods/libraries
+(`test/fixtures/build-lib`, `build-mod`, `datagen-mod`, and others) and via
+real child-process CLI invocations producing a genuine `.mcaddon` ZIP -
+never against real Claude Waifus, so none of OR-Track F0 carries cutover
+risk. The cross-package import and datagen fixtures specifically prove
+real compilation, not just "didn't crash": `build-mod`'s script imports
+`build-lib`'s export **by package name** and the real value is asserted to
+flow through into the bundled output; `datagen-mod`'s build-time script
+calls real `@openrock/datagen` builders and the real generated recipe/loot
+table JSON is asserted in the output.
 
 **CLI philosophy (OR-Track H1)**: git-like subcommands, plain-text output
 by default, real meaningful exit codes (0 success, 1 failure - matched by

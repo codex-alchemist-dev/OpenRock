@@ -50,26 +50,43 @@ test("buildMod: {{ns}} placeholders are filled from the mod's own namespace", ()
     assert.strictEqual(note.note, "this mod's namespace is bm");
 });
 
-test("buildMod: scripts from BOTH the library and the mod are bundled, namespaced by package folder", () => {
+test("buildMod: scripts from BOTH the library and the mod are REAL esbuild-bundled into one scripts/main.js, not copied as separate per-package files", () => {
     const { bp } = build();
-    assert.ok(bp.has("scripts/build-lib/lib_runtime.js"));
-    assert.ok(bp.has("scripts/build-mod/mod_runtime.js"));
+    assert.deepStrictEqual([...bp.keys()].filter(k => k.startsWith("scripts/")).sort(), ["scripts/main.js", "scripts/main.js.map"], "exactly one real bundled scripts/main.js (+ its source map), no per-package folders");
+    const main = bp.get("scripts/main.js").toString("utf8");
+    assert.match(main, /LIB_MARKER\s*=\s*"build-lib-loaded"/, "build-lib's own code is really in the bundle");
+    assert.match(main, /MOD_MARKER\s*=\s*"build-mod-loaded"/, "build-mod's own code is really in the bundle");
 });
 
-test("buildMod: main.js imports the library's scripts BEFORE the mod's own (dependency load order)", () => {
+test("buildMod: build-mod's script genuinely IMPORTS build-lib's export BY PACKAGE NAME (a bare specifier, no relative path) and the value really flows through - proof this is real cross-package resolution, not string concatenation", () => {
     const { bp } = build();
     const main = bp.get("scripts/main.js").toString("utf8");
-    const libIndex = main.indexOf("build-lib/lib_runtime.js");
-    const modIndex = main.indexOf("build-mod/mod_runtime.js");
-    assert.ok(libIndex >= 0 && modIndex >= 0 && libIndex < modIndex);
+    // COMBINED = `${LIB_MARKER}+${MOD_MARKER}` in the source - if esbuild's
+    // alias-based cross-package resolution didn't really work, this would
+    // either be a build failure (unresolvable "build-lib" specifier) or a
+    // template literal left unevaluated in the output; a real bundler
+    // inlines both variables' real values into one combined expression.
+    assert.match(main, /COMBINED\s*=\s*`\$\{LIB_MARKER\}\+\$\{MOD_MARKER\}`/);
 });
 
-test("buildMod: content.scriptEntry narrows the top-level import to just that file, other scripts still copied", () => {
+test("buildMod: content.scriptEntry names the real bundling entry point; a same-package file reached only via a relative import is bundled in (used) or tree-shaken out (unused) like a real bundler, never separately copied", () => {
     const { bp } = buildMod(path.join(FIXTURES, "script-entry-lib"));
+    assert.deepStrictEqual([...bp.keys()].filter(k => k.startsWith("scripts/")).sort(), ["scripts/main.js", "scripts/main.js.map"]);
     const main = bp.get("scripts/main.js").toString("utf8");
-    assert.match(main, /import "\.\/script-entry-mod\/main\.js";/);
-    assert.doesNotMatch(main, /helper\.js/, "helper.js is an implementation detail reached via main.js's own import, never double-imported at the top level");
-    assert.ok(bp.has("scripts/script-entry-mod/helper.js"), "helper.js must still be COPIED into the build, just not top-level-imported");
+    // helper.js's HELPER is genuinely used (ENTRY = HELPER) - it must be
+    // present, bundled in, not a separate uncompiled file sitting alongside.
+    assert.match(main, /HELPER\s*=\s*true/);
+    assert.strictEqual(bp.has("scripts/script-entry-mod/helper.js"), false, "no separate per-file copy - it's bundled into scripts/main.js");
+});
+
+test("buildMod: writes a real source map alongside scripts/main.js (OR-Track C2's debugger needs this - a real bundle mixes multiple files' line numbers, unlike the old copy-only model)", () => {
+    const { bp } = build();
+    assert.ok(bp.has("scripts/main.js.map"));
+    const map = JSON.parse(bp.get("scripts/main.js.map").toString("utf8"));
+    assert.ok(Array.isArray(map.sources) && map.sources.length >= 2, "the map must reference both build-lib's and build-mod's original source files");
+    assert.ok(map.sources.some(s => s.includes("lib_runtime.js")));
+    assert.ok(map.sources.some(s => s.includes("mod_runtime.js")));
+    assert.match(bp.get("scripts/main.js").toString("utf8"), /\/\/# sourceMappingURL=main\.js\.map\s*$/);
 });
 
 test("buildMod: generates a real BP manifest.json from packs/version", () => {
@@ -98,12 +115,12 @@ test("buildMod: throws if pointed at an ordinary (non-hybrid) library with no pa
 
 // ---- OR-Track K: hybrid libraries (their own packs, still kind:"library") ----
 
-test("buildMod: a hybrid library (kind:\"library\" with its own packs) builds as its own real pack", () => {
+test("buildMod: a hybrid library (kind:\"library\" with its own packs) builds as its own real pack, real esbuild-bundled scripts included", () => {
     const { bp, rp, manifest } = buildMod(path.join(FIXTURES, "hybrid-library"));
     assert.strictEqual(manifest.kind, "library");
     assert.ok(bp.has("manifest.json"));
     assert.ok(bp.has("scripts/main.js"));
-    assert.ok(bp.has(`scripts/${"hybrid-library"}/runtime.js`));
+    assert.match(bp.get("scripts/main.js").toString("utf8"), /HYBRID_MARKER\s*=\s*true/);
     assert.ok(rp.has("textures/note.txt"));
     const bpManifest = JSON.parse(bp.get("manifest.json").toString("utf8"));
     assert.strictEqual(bpManifest.header.uuid, "f1111111-1111-1111-1111-111111111111");
@@ -122,6 +139,43 @@ test("buildMod: a resource-pack-only mod's RP manifest has no script/data module
     const { rp } = buildMod(path.join(FIXTURES, "resource-only-mod"));
     const manifest = JSON.parse(rp.get("manifest.json").toString("utf8"));
     assert.deepStrictEqual(manifest.modules, [{ type: "resources", uuid: "e5555555-5555-5555-5555-555555555555", version: [1, 0, 0] }]);
+});
+
+// ---- content.datagenEntry (OR-Track B2, made real) -------------------------
+
+const LIBRARY_DIRS = resolveBundledLibraryDirs(path.join(__dirname, ".."));
+
+test("buildMod: content.datagenEntry executes a real Node script using @openrock/datagen's real builders, output merged into the pack", () => {
+    const { bp } = buildMod(path.join(FIXTURES, "datagen-mod"), { libraryDirs: LIBRARY_DIRS });
+    assert.ok(bp.has("recipes/dg_test_recipe.json"));
+    const recipe = JSON.parse(bp.get("recipes/dg_test_recipe.json").toString("utf8"));
+    assert.strictEqual(recipe["minecraft:recipe_shapeless"].description.identifier, "dg:test_recipe");
+    assert.deepStrictEqual(recipe["minecraft:recipe_shapeless"].ingredients, [{ item: "minecraft:stick", count: 2 }]);
+
+    assert.ok(bp.has("loot_tables/dg_test_loot.json"));
+    const loot = JSON.parse(bp.get("loot_tables/dg_test_loot.json").toString("utf8"));
+    assert.strictEqual(loot.pools[0].entries[0].name, "dg:test_item");
+});
+
+test("buildMod: datagenEntry without a real @openrock/datagen dependency resolvable is a clear compile error, not a cryptic require() failure (caught even earlier than datagenApi() itself - by collectEntries()'s own normal dependency resolution)", () => {
+    assert.throws(
+        () => buildMod(path.join(FIXTURES, "datagen-mod")), // no libraryDirs given - @openrock/datagen can't resolve
+        /depends on library "@openrock\/datagen", but no directory for it was given/,
+    );
+});
+
+test("buildMod: datagenEntry with NO dependsOn declared for @openrock/datagen at all (not just missing libraryDirs) is caught by datagenApi()'s own error, not collectEntries()'s", () => {
+    assert.throws(
+        () => buildMod(path.join(FIXTURES, "datagen-mod-no-dep"), { libraryDirs: LIBRARY_DIRS }),
+        /needs a real "@openrock\/datagen" dependency.*none found/,
+    );
+});
+
+test("buildMod: a datagenEntry script that doesn't exist is a clear compile error naming the missing path", () => {
+    assert.throws(
+        () => buildMod(path.join(FIXTURES, "datagen-mod-missing-entry"), { libraryDirs: LIBRARY_DIRS }),
+        /content\.datagenEntry "nope\.js" doesn't exist/,
+    );
 });
 
 test("resolveBundledLibraryDirs: finds every real libs/* package by name", () => {

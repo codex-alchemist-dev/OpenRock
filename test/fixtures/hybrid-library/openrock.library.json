@@ -18,6 +18,6 @@
       "moduleUuid": "f5555555-5555-5555-5555-555555555555"
     }
   },
-  "content": { "scriptsDir": "scripts", "rpOverlayDir": "rp" },
+  "content": { "scriptsDir": "scripts", "scriptEntry": "runtime.js", "rpOverlayDir": "rp" },
   "provides": { "api": "src/register.js", "hookNamespaces": [] }
 }
