@@ -4,6 +4,9 @@
   "name": "openrock-pathfinding-demo",
   "version": "0.1.0",
   "namespace": "prd",
+  "dependsOn": {
+    "@openrock/pathfinding": { "type": "library" }
+  },
   "packs": {
     "behavior": {
       "folder": "OpenRock Pathfinding Demo B",

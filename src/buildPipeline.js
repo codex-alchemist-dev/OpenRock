@@ -277,6 +277,33 @@ function buildMod(modDir, { vendorDir, libraryDirs = {} } = {}) {
     const built = buildManifests(modManifest);
     if (hasBehaviorPack) {
         const resolveMap = new Map();
+        // OR-Track N: every collected package that declares a real
+        // `provides.api` (every kind:"library" entry already does, for the
+        // build-time kernel's own resolveDependency()) also gets a real
+        // esbuild `alias` entry pointing at that exact file - the same file
+        // path already used for the build-time kernel/datagenApi()
+        // resolution, reused here rather than inventing a second concept.
+        // This is what makes `import { navigateToCoordinate } from
+        // "@openrock/pathfinding"` resolve for real from inside a mod's own
+        // script: esbuild bundles libs/pathfinding/src/register.js (a real
+        // CommonJS file with real top-level named exports, per OR-Track N's
+        // hoist) and exposes those exports via its standard CJS->ESM
+        // interop. A library that was never hoisted (still only exports its
+        // kernel-shaped `register` function) still gets an alias here - if
+        // a mod's script tries to import a named export that doesn't
+        // actually exist on that file, esbuild fails with a clear
+        // resolution error, which is the CORRECT outcome (that library
+        // genuinely isn't meant to be imported that way), not a silent gap.
+        for (const { manifest, dir: entryDir } of ordered) {
+            if (manifest.provides?.api) {
+                resolveMap.set(manifest.name, path.resolve(entryDir, manifest.provides.api));
+            }
+        }
+        // A real content.scriptsDir entry (a genuine standalone script
+        // contributor, not just a library's API file) can still override
+        // the provides.api alias above for its own package name - resolved
+        // second, deliberately, so a package declaring BOTH gets its real
+        // script entry as the import target, not its bare library API file.
         for (const { manifest, dir: entryDir } of scriptEntries) {
             const entryFile = resolveScriptEntry(manifest, entryDir);
             if (entryFile) resolveMap.set(manifest.name, entryFile);

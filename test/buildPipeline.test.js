@@ -13,9 +13,17 @@ const path = require("path");
 const { buildMod, resolveBundledLibraryDirs, writeTree } = require("../src/buildPipeline.js");
 
 let passed = 0;
+const asyncTests = [];
 function test(name, fn) {
     try {
-        fn();
+        const result = fn();
+        if (result && typeof result.then === "function") {
+            asyncTests.push(result.then(
+                () => { passed++; console.log(`ok - ${name}`); },
+                e => { console.error(`FAIL - ${name}`); console.error(e); process.exitCode = 1; }
+            ));
+            return;
+        }
         passed++;
         console.log(`ok - ${name}`);
     } catch (e) {
@@ -201,4 +209,28 @@ test("writeTree: a real build round-trips through the filesystem correctly", () 
     }
 });
 
-console.log(`\n${passed} passed`);
+// ---- OR-Track N: provides.api-based alias resolution (real ESM import of a library) ----
+
+test("buildMod: a bare `import { x } from \"some-library\"` in a mod's own script resolves via that library's real provides.api file, even when the library declares NO content.scriptsDir of its own - and the bundled result genuinely EXECUTES the real function, not a stub", async () => {
+    const { bp } = buildMod(path.join(FIXTURES, "api-import-mod"), {
+        libraryDirs: { "api-only-lib": path.join(FIXTURES, "api-only-lib") },
+    });
+    const main = bp.get("scripts/main.js").toString("utf8");
+    // Real proof, not a string-match on emitted source: write the real
+    // bundled output to disk and actually import() + run it. This fixture's
+    // script imports no @minecraft/server API, so it's genuinely executable
+    // under plain Node - if the import didn't really resolve to
+    // api-only-lib's real double() function, this would either fail to
+    // import at all or RESULT would be wrong/undefined.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openrock-provides-api-test-"));
+    try {
+        const outFile = path.join(tmp, "bundled.mjs");
+        fs.writeFileSync(outFile, main);
+        const mod = await import(`file://${outFile.replace(/\\/g, "/")}`);
+        assert.strictEqual(mod.RESULT, 42, "double(21) must equal 42 - the REAL function body from api-only-lib actually ran");
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+Promise.all(asyncTests).then(() => console.log(`\n${passed} passed`));

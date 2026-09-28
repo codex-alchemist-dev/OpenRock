@@ -1,0 +1,24 @@
+{
+  "openrockVersion": 1,
+  "kind": "mod",
+  "name": "api-import-mod",
+  "version": "1.0.0",
+  "namespace": "aim",
+  "dependsOn": {
+    "api-only-lib": { "type": "library" }
+  },
+  "packs": {
+    "behavior": {
+      "folder": "API Import Mod B",
+      "uuid": "66666666-6666-6666-6666-666666666666",
+      "dataModuleUuid": "77777777-7777-7777-7777-777777777777",
+      "scriptModuleUuid": "88888888-8888-8888-8888-888888888888"
+    },
+    "resource": {
+      "folder": "API Import Mod R",
+      "uuid": "99999999-9999-9999-9999-999999999999",
+      "moduleUuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    }
+  },
+  "content": { "scriptsDir": "scripts", "bpOverlayDir": "bp" }
+}
