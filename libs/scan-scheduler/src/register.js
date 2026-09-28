@@ -12,6 +12,9 @@
 // (e.g. combat starts) without ever needing to re-register.
 //
 // See "OR-Track L", Part 1, item 5, in the project plan document.
+//
+// OR-Track N (2026-09-28): hoisted to real top-level module.exports (see
+// @openrock/pathfinding's header for the full rationale).
 "use strict";
 
 const KNOWN_TIERS = new Set(["active", "idle", "dormant"]);
@@ -27,64 +30,67 @@ function validateTierIntervals(tierIntervals) {
     }
 }
 
-module.exports = function register() {
-    /**
-     * @param {object} [opts]
-     * @param {{active:number, idle:number, dormant:number|null}} [opts.tierIntervals]
-     *   Tick counts between runs per tier. `dormant: null` means "never
-     *   polled at all" (the default, matching the plan's own rule that
-     *   dormant subjects reconcile lazily on a real event, not a steady
-     *   poll).
-     */
-    function createScanScheduler({ tierIntervals = { active: 6, idle: 30, dormant: null } } = {}) {
-        validateTierIntervals(tierIntervals);
-        const subjects = new Map(); // id -> { getTier, run }
-        const lastRun = new Map(); // id -> last tick run() was actually called
+/**
+ * @param {object} [opts]
+ * @param {{active:number, idle:number, dormant:number|null}} [opts.tierIntervals]
+ *   Tick counts between runs per tier. `dormant: null` means "never
+ *   polled at all" (the default, matching the plan's own rule that
+ *   dormant subjects reconcile lazily on a real event, not a steady
+ *   poll).
+ */
+function createScanScheduler({ tierIntervals = { active: 6, idle: 30, dormant: null } } = {}) {
+    validateTierIntervals(tierIntervals);
+    const subjects = new Map(); // id -> { getTier, run }
+    const lastRun = new Map(); // id -> last tick run() was actually called
 
-        function registerSubject(id, { getTier, run }) {
-            if (typeof getTier !== "function") throw new Error(`@openrock/scan-scheduler: registerSubject("${id}") requires opts.getTier(id) => "active"|"idle"|"dormant"`);
-            if (typeof run !== "function") throw new Error(`@openrock/scan-scheduler: registerSubject("${id}") requires opts.run(id, now)`);
-            subjects.set(id, { getTier, run });
-        }
-
-        function unregisterSubject(id) {
-            subjects.delete(id);
-            lastRun.delete(id);
-        }
-
-        /**
-         * Evaluates every registered subject once. A subject runs iff its
-         * current tier has a real (non-null) interval AND enough ticks have
-         * passed since its last run (or it has never run).
-         */
-        function tick(now) {
-            const ranIds = [];
-            for (const [id, subject] of subjects) {
-                const tier = subject.getTier(id);
-                if (!KNOWN_TIERS.has(tier)) throw new Error(`@openrock/scan-scheduler: subject "${id}"'s getTier() returned unknown tier "${tier}"`);
-                const interval = tierIntervals[tier];
-                if (interval === null) continue; // dormant - never polled
-                const last = lastRun.get(id);
-                if (last !== undefined && now - last < interval) continue;
-                subject.run(id, now);
-                lastRun.set(id, now);
-                ranIds.push(id);
-            }
-            return ranIds;
-        }
-
-        /** Runs a subject unconditionally right now, bypassing its tier/interval - the real reconcile-on-event path for a dormant subject. */
-        function forceRun(id, now) {
-            const subject = subjects.get(id);
-            if (!subject) throw new Error(`@openrock/scan-scheduler: forceRun("${id}") - no such registered subject`);
-            subject.run(id, now);
-            lastRun.set(id, now);
-        }
-
-        function getLastRun(id) { return lastRun.get(id); }
-
-        return { registerSubject, unregisterSubject, tick, forceRun, getLastRun };
+    function registerSubject(id, { getTier, run }) {
+        if (typeof getTier !== "function") throw new Error(`@openrock/scan-scheduler: registerSubject("${id}") requires opts.getTier(id) => "active"|"idle"|"dormant"`);
+        if (typeof run !== "function") throw new Error(`@openrock/scan-scheduler: registerSubject("${id}") requires opts.run(id, now)`);
+        subjects.set(id, { getTier, run });
     }
 
+    function unregisterSubject(id) {
+        subjects.delete(id);
+        lastRun.delete(id);
+    }
+
+    /**
+     * Evaluates every registered subject once. A subject runs iff its
+     * current tier has a real (non-null) interval AND enough ticks have
+     * passed since its last run (or it has never run).
+     */
+    function tick(now) {
+        const ranIds = [];
+        for (const [id, subject] of subjects) {
+            const tier = subject.getTier(id);
+            if (!KNOWN_TIERS.has(tier)) throw new Error(`@openrock/scan-scheduler: subject "${id}"'s getTier() returned unknown tier "${tier}"`);
+            const interval = tierIntervals[tier];
+            if (interval === null) continue; // dormant - never polled
+            const last = lastRun.get(id);
+            if (last !== undefined && now - last < interval) continue;
+            subject.run(id, now);
+            lastRun.set(id, now);
+            ranIds.push(id);
+        }
+        return ranIds;
+    }
+
+    /** Runs a subject unconditionally right now, bypassing its tier/interval - the real reconcile-on-event path for a dormant subject. */
+    function forceRun(id, now) {
+        const subject = subjects.get(id);
+        if (!subject) throw new Error(`@openrock/scan-scheduler: forceRun("${id}") - no such registered subject`);
+        subject.run(id, now);
+        lastRun.set(id, now);
+    }
+
+    function getLastRun(id) { return lastRun.get(id); }
+
+    return { registerSubject, unregisterSubject, tick, forceRun, getLastRun };
+}
+
+function register() {
     return { api: { createScanScheduler } };
-};
+}
+
+module.exports = register;
+module.exports.createScanScheduler = createScanScheduler;

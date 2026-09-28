@@ -22,6 +22,9 @@
 //    coordinate needs bounds-clamping regardless of source dimension.
 //
 // See "OR-Track L", Part 1, item 4, in the project plan document.
+//
+// OR-Track N (2026-09-28): hoisted to real top-level module.exports (see
+// @openrock/pathfinding's header for the full rationale).
 "use strict";
 
 // Current documented Bedrock world-height bounds per dimension. The Nether
@@ -34,77 +37,77 @@ const DIMENSION_Y_BOUNDS = {
     the_end: { min: 0, max: 256 },
 };
 
-module.exports = function register() {
-    /**
-     * Runs `fn` deferred via `scheduleFn` (real usage: `system.run`) rather
-     * than synchronously - the confirmed fix for entity.remove()/
-     * dimension.spawnEntity() silently no-op'ing when called synchronously
-     * from inside a playerDimensionChange handler. Always defers,
-     * unconditionally - there is no "safe to call synchronously" case this
-     * helper tries to detect, since the failure is silent or would need to
-     * be to catch it.
-     */
-    function safeDimensionChangeAction(scheduleFn, fn) {
-        if (typeof scheduleFn !== "function") {
-            throw new Error("@openrock/entity-safety: safeDimensionChangeAction() requires a real scheduleFn (e.g. system.run)");
-        }
-        if (typeof fn !== "function") {
-            throw new Error("@openrock/entity-safety: safeDimensionChangeAction() requires a real fn to run");
-        }
-        scheduleFn(fn);
+/**
+ * Runs `fn` deferred via `scheduleFn` (real usage: `system.run`) rather
+ * than synchronously - the confirmed fix for entity.remove()/
+ * dimension.spawnEntity() silently no-op'ing when called synchronously
+ * from inside a playerDimensionChange handler. Always defers,
+ * unconditionally - there is no "safe to call synchronously" case this
+ * helper tries to detect, since the failure is silent or would need to
+ * be to catch it.
+ */
+function safeDimensionChangeAction(scheduleFn, fn) {
+    if (typeof scheduleFn !== "function") {
+        throw new Error("@openrock/entity-safety: safeDimensionChangeAction() requires a real scheduleFn (e.g. system.run)");
     }
-
-    /**
-     * The confirmed-correct source of a player's post-dimension-change
-     * location - `player.location` directly, never a dimension-change
-     * event's own `toLocation` field (which can genuinely differ from
-     * where the player actually ended up, by a real, observed amount).
-     */
-    function resolveActualLocation(player) {
-        if (!player || typeof player.location !== "object") {
-            throw new Error("@openrock/entity-safety: resolveActualLocation() requires a real player with a .location");
-        }
-        return player.location;
+    if (typeof fn !== "function") {
+        throw new Error("@openrock/entity-safety: safeDimensionChangeAction() requires a real fn to run");
     }
+    scheduleFn(fn);
+}
 
-    /**
-     * Diagnostic helper: compares a dimension-change event's own
-     * `toLocation` against the player's real, current `.location`, for
-     * logging/debugging drift - never a source of truth to build logic on
-     * (resolveActualLocation() is that), just visibility into how much they
-     * diverged this time.
-     */
-    function describeLocationDrift(player, event) {
-        const actual = resolveActualLocation(player);
-        const reported = event?.toLocation ?? null;
-        if (!reported) return { actual, reported: null, drift: null };
-        return {
-            actual, reported,
-            drift: { x: actual.x - reported.x, y: actual.y - reported.y, z: actual.z - reported.z },
-        };
+/**
+ * The confirmed-correct source of a player's post-dimension-change
+ * location - `player.location` directly, never a dimension-change
+ * event's own `toLocation` field (which can genuinely differ from
+ * where the player actually ended up, by a real, observed amount).
+ */
+function resolveActualLocation(player) {
+    if (!player || typeof player.location !== "object") {
+        throw new Error("@openrock/entity-safety: resolveActualLocation() requires a real player with a .location");
     }
+    return player.location;
+}
 
-    /** @returns {{min:number, max:number}} the real Y bounds for a known dimension id. */
-    function getDimensionYBounds(dimensionId) {
-        const bounds = DIMENSION_Y_BOUNDS[dimensionId];
-        if (!bounds) {
-            throw new Error(`@openrock/entity-safety: unknown dimensionId "${dimensionId}" - known: ${Object.keys(DIMENSION_Y_BOUNDS).join(", ")}`);
-        }
-        return bounds;
+/**
+ * Diagnostic helper: compares a dimension-change event's own
+ * `toLocation` against the player's real, current `.location`, for
+ * logging/debugging drift - never a source of truth to build logic on
+ * (resolveActualLocation() is that), just visibility into how much they
+ * diverged this time.
+ */
+function describeLocationDrift(player, event) {
+    const actual = resolveActualLocation(player);
+    const reported = event?.toLocation ?? null;
+    if (!reported) return { actual, reported: null, drift: null };
+    return {
+        actual, reported,
+        drift: { x: actual.x - reported.x, y: actual.y - reported.y, z: actual.z - reported.z },
+    };
+}
+
+/** @returns {{min:number, max:number}} the real Y bounds for a known dimension id. */
+function getDimensionYBounds(dimensionId) {
+    const bounds = DIMENSION_Y_BOUNDS[dimensionId];
+    if (!bounds) {
+        throw new Error(`@openrock/entity-safety: unknown dimensionId "${dimensionId}" - known: ${Object.keys(DIMENSION_Y_BOUNDS).join(", ")}`);
     }
+    return bounds;
+}
 
-    /**
-     * Clamps `location.y` into the real bounds of `dimensionId`, leaving
-     * x/z untouched (Bedrock's documented, reproduced Y-bounds violation is
-     * specifically vertical - e.g. a valid Overworld Y coordinate handed
-     * straight to a Nether teleport can genuinely throw
-     * LocationOutOfWorldBoundariesError without this).
-     */
-    function clampToDimensionBounds(location, dimensionId) {
-        const { min, max } = getDimensionYBounds(dimensionId);
-        return { ...location, y: Math.min(max, Math.max(min, location.y)) };
-    }
+/**
+ * Clamps `location.y` into the real bounds of `dimensionId`, leaving
+ * x/z untouched (Bedrock's documented, reproduced Y-bounds violation is
+ * specifically vertical - e.g. a valid Overworld Y coordinate handed
+ * straight to a Nether teleport can genuinely throw
+ * LocationOutOfWorldBoundariesError without this).
+ */
+function clampToDimensionBounds(location, dimensionId) {
+    const { min, max } = getDimensionYBounds(dimensionId);
+    return { ...location, y: Math.min(max, Math.max(min, location.y)) };
+}
 
+function register() {
     return {
         api: {
             safeDimensionChangeAction,
@@ -114,4 +117,11 @@ module.exports = function register() {
             clampToDimensionBounds,
         },
     };
-};
+}
+
+module.exports = register;
+module.exports.safeDimensionChangeAction = safeDimensionChangeAction;
+module.exports.resolveActualLocation = resolveActualLocation;
+module.exports.describeLocationDrift = describeLocationDrift;
+module.exports.getDimensionYBounds = getDimensionYBounds;
+module.exports.clampToDimensionBounds = clampToDimensionBounds;
