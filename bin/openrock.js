@@ -20,6 +20,18 @@
 //                              VS Code launch.json for Mojang's official
 //                              minecraft-js debugger extension (port 19144)
 //
+// OR-Track Q: `build`/`check` ALSO run a real automated Bedrock Dedicated
+// Server smoke test by default (src/bdsTestHarness.js) - the just-built
+// pack is installed into a real local BDS instance and booted for real,
+// checking its actual console output for real script/content load errors,
+// the exact mechanism that caught a genuine, reproduced esbuild
+// tree-shaking bug tonight that every Node-side test missed. Requires a
+// real local BDS instance (set OPENROCK_BDS_DIR, or place one at a sibling
+// "bds-test" directory next to this workspace) - if none is found, this is
+// a one-line skip note, never a hard failure (so a machine with no BDS
+// installed can still build). Pass --no-test-server to skip explicitly,
+// e.g. for fast dev-loop iteration.
+//
 // <modDir> is the folder containing openrock.mod.json (defaults to the
 // current directory). A mod's "library"-type dependencies are resolved
 // against OpenRock's own bundled libs/* by name automatically
@@ -42,6 +54,7 @@ const { buildMod, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, w
 const { resolveManifestSet } = require("../src/resolver.js");
 const { zip } = require("../src/zip.js");
 const { loadManifestFile } = require("../src/manifest.js");
+const { runSmokeTest } = require("../src/bdsTestHarness.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
 const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug"];
@@ -64,26 +77,52 @@ function buildOpts(modDir) {
     return { vendorDir: path.join(modDir, "vendor"), libraryDirs: resolveBundledLibraryDirs(OPENROCK_ROOT) };
 }
 
+// OR-Track Q: runs the real BDS smoke test unless --no-test-server was
+// passed. A missing BDS instance is a one-line skip note (never blocks a
+// machine with none installed); a REAL failure (the pack failed to load,
+// or a script threw during load) throws, failing the whole command - this
+// is the actual "catch it before the user ever sees it" gate.
+async function maybeRunSmokeTest(r, flags, quiet = false) {
+    if (flags.includes("--no-test-server")) return;
+    let result;
+    try {
+        result = await runSmokeTest(r);
+    } catch (e) {
+        if (/no real BDS instance found/.test(e.message)) {
+            if (!quiet) console.log(`[${stamp()}] (skipping BDS smoke test - ${e.message})`);
+            return;
+        }
+        throw e;
+    }
+    if (!result.ok) {
+        const detail = result.errors.length ? result.errors.join("\n") : "pack never reached \"Pack Stack\" - it didn't load at all.";
+        throw new Error(`BDS smoke test FAILED for "${r.manifest.name}" (real server boot at ${result.bdsDir}):\n${detail}`);
+    }
+    if (!quiet) console.log(`[${stamp()}] BDS smoke test passed - real server booted cleanly with "${r.manifest.name}" loaded (${result.bdsDir}).`);
+}
+
 // OR-Track G: a resource-pack-only mod (packs.behavior === false) has
 // r.bp === null - every command below only touches the behavior pack half
 // when it's genuinely there.
-function cmdBuild(modDir) {
+async function cmdBuild(modDir, flags = []) {
     const t0 = Date.now();
     const r = buildMod(modDir, buildOpts(modDir));
     const out = path.join(modDir, "build");
     const a = r.bp ? writeTree(r.bp, path.join(out, r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
     const b = writeTree(r.rp, path.join(out, r.manifest.packs.resource.folder));
     console.log(`[${stamp()}] Built ${r.manifest.name} in ${Date.now() - t0}ms -> ${out} (${a.written + b.written} written, ${a.removed + b.removed} removed)`);
+    await maybeRunSmokeTest(r, flags);
     return r;
 }
 
 // OR-Track H1: a --json mode, for piping into other tools rather than
 // scraping human-readable text - `check` is the first command to get one
 // (the one most likely to be scripted, e.g. as a pre-commit/CI gate).
-function cmdCheck(modDir, flags = []) {
+async function cmdCheck(modDir, flags = []) {
     const t0 = Date.now();
     const r = buildMod(modDir, buildOpts(modDir));
     const ms = Date.now() - t0;
+    await maybeRunSmokeTest(r, flags, flags.includes("--json"));
     if (flags.includes("--json")) {
         console.log(JSON.stringify({ ok: true, name: r.manifest.name, bpFiles: r.bp ? r.bp.size : null, rpFiles: r.rp.size, ms }));
     } else {
@@ -284,15 +323,15 @@ function cmdDebug(modDir, flags) {
     console.log(`Install Mojang's "Minecraft Bedrock Edition" VS Code extension, enable the world's script debugger, then Run > Start Debugging ("Debug ${manifest.name}").`);
 }
 
-function main() {
+async function main() {
     const args = process.argv.slice(2);
     const flags = args.filter(a => a.startsWith("--"));
     const [cmd, dirArg] = args.filter(a => !a.startsWith("--"));
     const modDir = path.resolve(dirArg ?? ".");
     try {
         switch (cmd) {
-            case "build": cmdBuild(modDir); break;
-            case "check": cmdCheck(modDir, flags); break;
+            case "build": await cmdBuild(modDir, flags); break;
+            case "check": await cmdCheck(modDir, flags); break;
             case "export": cmdExport(modDir); break;
             case "deploy": cmdDeploy(modDir); break;
             case "dev": cmdDev(modDir); break;

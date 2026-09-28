@@ -49,7 +49,7 @@ function run(args) {
 
 test("openrock build: produces a real build/ tree with a correct manifest.json", () => {
     const modDir = makeStandaloneMod();
-    const output = run(["build", modDir]);
+    const output = run(["build", modDir, "--no-test-server"]);
     assert.match(output, /Built cli-test-mod/);
     const manifestPath = path.join(modDir, "build", "CLI Test B", "manifest.json");
     assert.ok(fs.existsSync(manifestPath));
@@ -68,14 +68,14 @@ test("openrock build: produces a real build/ tree with a correct manifest.json",
 
 test("openrock check: validates without writing anything", () => {
     const modDir = makeStandaloneMod();
-    const output = run(["check", modDir]);
+    const output = run(["check", modDir, "--no-test-server"]);
     assert.match(output, /OK - cli-test-mod/);
     assert.strictEqual(fs.existsSync(path.join(modDir, "build")), false);
 });
 
 test("openrock check --json: emits machine-readable output (OR-Track H1)", () => {
     const modDir = makeStandaloneMod();
-    const output = run(["check", modDir, "--json"]);
+    const output = run(["check", modDir, "--json", "--no-test-server"]);
     const parsed = JSON.parse(output);
     assert.deepStrictEqual(parsed, { ok: true, name: "cli-test-mod", bpFiles: parsed.bpFiles, rpFiles: parsed.rpFiles, ms: parsed.ms });
     assert.ok(parsed.bpFiles > 0);
@@ -84,14 +84,14 @@ test("openrock check --json: emits machine-readable output (OR-Track H1)", () =>
 
 test("openrock check --json (resource-pack-only): bpFiles is null, not a count of nothing", () => {
     const modDir = path.join(__dirname, "fixtures", "resource-only-mod");
-    const parsed = JSON.parse(run(["check", modDir, "--json"]));
+    const parsed = JSON.parse(run(["check", modDir, "--json", "--no-test-server"]));
     assert.strictEqual(parsed.ok, true);
     assert.strictEqual(parsed.bpFiles, null);
 });
 
 test("openrock check --json on a broken mod: emits a JSON error object, not a plain-text one", () => {
     let threw = false;
-    try { run(["check", path.join(os.tmpdir(), "definitely-does-not-exist-openrock-test"), "--json"]); }
+    try { run(["check", path.join(os.tmpdir(), "definitely-does-not-exist-openrock-test"), "--json", "--no-test-server"]); }
     catch (e) {
         threw = true;
         const parsed = JSON.parse(e.stdout);
@@ -134,7 +134,7 @@ test("openrock build (hybrid library, OR-Track K): builds as its own real pack v
     const buildOut = path.join(modDir, "build");
     if (fs.existsSync(buildOut)) fs.rmSync(buildOut, { recursive: true, force: true });
     try {
-        const output = run(["build", modDir]);
+        const output = run(["build", modDir, "--no-test-server"]);
         assert.match(output, /Built hybrid-library/);
         assert.ok(fs.existsSync(path.join(buildOut, "Hybrid Library B", "manifest.json")));
         assert.ok(fs.existsSync(path.join(buildOut, "Hybrid Library R", "textures", "note.txt")));
@@ -162,7 +162,7 @@ test("openrock build (resource-pack-only): produces only a resource pack, no beh
     const buildOut = path.join(modDir, "build");
     if (fs.existsSync(buildOut)) fs.rmSync(buildOut, { recursive: true, force: true });
     try {
-        const output = run(["build", modDir]);
+        const output = run(["build", modDir, "--no-test-server"]);
         assert.match(output, /Built resource-only-mod/);
         assert.ok(fs.existsSync(path.join(buildOut, "Resource Only R", "manifest.json")));
         assert.strictEqual(fs.readdirSync(buildOut).length, 1, "expected only the resource pack folder, no behavior pack folder");
@@ -236,7 +236,7 @@ test("openrock dev (multi-mod): a cross-mod breaks conflict is caught before any
 
 test("openrock build <nonexistent dir>: fails with a clear error, non-zero exit", () => {
     let threw = false;
-    try { run(["build", path.join(os.tmpdir(), "definitely-does-not-exist-openrock-test")]); }
+    try { run(["build", path.join(os.tmpdir(), "definitely-does-not-exist-openrock-test"), "--no-test-server"]); }
     catch (e) { threw = true; assert.match(e.stderr ?? e.message, /No openrock\.mod\.json/); }
     assert.strictEqual(threw, true);
 });
