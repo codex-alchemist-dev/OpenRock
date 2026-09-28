@@ -54,7 +54,18 @@ async function maybeRunSmokeTest(r, flags, quiet = false) {
         const detail = result.errors.length ? result.errors.join("\n") : "pack never reached \"Pack Stack\" - it didn't load at all.";
         throw new Error(`BDS smoke test FAILED for "${r.manifest.name}" (real server boot at ${result.bdsDir}):\n${detail}`);
     }
-    if (!quiet) console.log(`[${stamp()}] BDS smoke test passed - real server booted cleanly with "${r.manifest.name}" loaded (${result.bdsDir}).`);
+    if (!quiet) {
+        // OR-Track Q3: report the real per-entity/per-block spawn/place
+        // results, not just "it loaded" - this is the actual "all entities
+        // and blocks in the mod's definitions will be summoned" guarantee.
+        const smoke = result.smokeResults ?? [];
+        const entityCount = smoke.filter(s => s.kind === "entity").length;
+        const blockCount = smoke.filter(s => s.kind === "block").length;
+        const smokeNote = result.smokeDone
+            ? ` ${entityCount} entit${entityCount === 1 ? "y" : "ies"} and ${blockCount} block${blockCount === 1 ? "" : "s"} genuinely spawned/placed and confirmed clean.`
+            : "";
+        console.log(`[${stamp()}] BDS smoke test passed - real server booted cleanly with "${r.manifest.name}" loaded (${result.bdsDir}).${smokeNote}`);
+    }
 }
 
 module.exports = { stamp, comMojang, buildOpts, maybeRunSmokeTest };

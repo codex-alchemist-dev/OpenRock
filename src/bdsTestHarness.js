@@ -33,6 +33,10 @@ const path = require("path");
 const { spawn } = require("child_process");
 const { writeTree } = require("./fsTree.js");
 const { installBds, defaultCacheRoot } = require("../tools/bds/install.js");
+const {
+    enumerateTestTargets, buildTestHarnessPack,
+    MARKER_ENTITY_OK, MARKER_ENTITY_FAIL, MARKER_BLOCK_OK, MARKER_BLOCK_FAIL, MARKER_DONE,
+} = require("./testHarnessPack.js");
 
 const TEST_WORLD_NAME = "openrock-test";
 
@@ -109,6 +113,15 @@ async function resolveOrInstallBdsInstance(dir, openrockRoot, { autoInstall = tr
  * BDS itself expects (confirmed via direct research, not assumed):
  * world_behavior_packs.json / world_resource_packs.json referencing each
  * pack's real header UUID + version.
+ *
+ * OR-Track Q3, made real: alongside the mod-under-test's own pack, this
+ * ALSO installs the real synthetic test-harness pack (testHarnessPack.js) -
+ * enumerated from the mod's OWN real compiled entity/block JSON, so it
+ * genuinely spawns/places whatever this specific build declares, never a
+ * stale or guessed list. A mod with zero entities/blocks still gets the
+ * harness installed (it just does nothing beyond logging MARKER_DONE with
+ * entities=0 blocks=0) - keeps the mechanism uniform rather than
+ * conditionally present.
  */
 function installIntoBds(bdsDir, built) {
     const { bp, rp, manifest } = built;
@@ -117,10 +130,22 @@ function installIntoBds(bdsDir, built) {
     fs.mkdirSync(worldDir, { recursive: true });
 
     const behaviorRefs = [];
+    let hasSmokeTargets = false;
     if (bp) {
         const folder = manifest.packs.behavior.folder;
         writeTree(bp, path.join(bdsDir, "behavior_packs", folder));
         behaviorRefs.push({ pack_id: manifest.packs.behavior.uuid, version });
+
+        const targets = enumerateTestTargets(bp);
+        hasSmokeTargets = targets.entityIds.length + targets.blockIds.length > 0;
+        // Real bug, caught live via an actual BDS boot: a hardcoded/guessed
+        // @minecraft/server version can leave real APIs (world.afterEvents.
+        // worldLoad) undefined at runtime. Reusing the mod-under-test's OWN
+        // declared version is a known-working value for this exact server.
+        const serverModuleVersion = manifest.engine?.scriptModules?.["@minecraft/server"];
+        const harness = buildTestHarnessPack(targets, { serverModuleVersion });
+        writeTree(harness.bp, path.join(bdsDir, "behavior_packs", harness.folder));
+        behaviorRefs.push({ pack_id: harness.uuid, version: harness.version });
     }
     const folder = manifest.packs.resource.folder;
     writeTree(rp, path.join(bdsDir, "resource_packs", folder));
@@ -130,6 +155,7 @@ function installIntoBds(bdsDir, built) {
     fs.writeFileSync(path.join(worldDir, "world_resource_packs.json"), JSON.stringify(resourceRefs, null, 2) + "\n");
 
     configureServerProperties(bdsDir);
+    return { hasSmokeTargets };
 }
 
 /**
@@ -159,20 +185,45 @@ function setProp(text, key, value) {
  * mirrors MinUI's lib/lintjsonui.js's own discipline of only encoding
  * CONFIRMED failure classes, not speculative ones. A [Scripting][ERROR]
  * line (the exact class caught tonight) is the primary signal; a handful
- * of other known-fatal Content Log categories are included too.
+ * of other known-fatal Content Log categories are included too. OR-Track
+ * Q3's own MARKER_ENTITY_FAIL/MARKER_BLOCK_FAIL are real, structured,
+ * impossible-to-false-positive signals (they never appear in any real
+ * Bedrock log line unless this project's own harness script emitted them),
+ * so they're just as fatal as a genuine script exception.
  */
 const FATAL_LOG_PATTERNS = [
     /\[Scripting\]\s*\[?ERROR\]?/i,
     /ran with error/i,
     /Unable to load behavior pack/i,
     /manifest\.json.*invalid/i,
+    new RegExp(MARKER_ENTITY_FAIL.replace(/[[\]]/g, "\\$&")),
+    new RegExp(MARKER_BLOCK_FAIL.replace(/[[\]]/g, "\\$&")),
 ];
+
+// A per-target OK/FAIL line, e.g. "[OR-SMOKE][ENTITY][OK] prd:nav_test" or
+// "[OR-SMOKE][ENTITY][FAIL] prd:nav_test :: Error: ...". " :: " (not a bare
+// colon) separates the id from a FAIL line's error text, since a real
+// Bedrock identifier is itself "namespace:name" - splitting on the first
+// colon would cut a real id in half.
+const SMOKE_LINE = /\[OR-SMOKE\]\[(ENTITY|BLOCK)\]\[(OK|FAIL)\] ([^\s].*?)(?: :: (.*))?$/;
 
 function analyzeOutput(output) {
     const lines = output.split(/\r?\n/);
     const errors = lines.filter(l => FATAL_LOG_PATTERNS.some(p => p.test(l)));
     const packLoaded = lines.some(l => /Pack Stack/.test(l));
-    return { ok: errors.length === 0 && packLoaded, errors, packLoaded, rawOutput: output };
+
+    // OR-Track Q3: the real per-entity/per-block results, parsed from the
+    // synthetic harness pack's own structured console output - not just
+    // "the pack loaded," but "every declared entity/block was genuinely
+    // spawned/placed for real."
+    const smokeResults = [];
+    for (const l of lines) {
+        const m = SMOKE_LINE.exec(l);
+        if (m) smokeResults.push({ kind: m[1].toLowerCase(), ok: m[2] === "OK", id: m[3], detail: m[4] ?? null });
+    }
+    const smokeDone = lines.some(l => l.includes(MARKER_DONE));
+
+    return { ok: errors.length === 0 && packLoaded, errors, packLoaded, smokeResults, smokeDone, rawOutput: output };
 }
 
 /**
@@ -181,9 +232,18 @@ function analyzeOutput(output) {
  * `timeoutMs` for boot to settle (BDS never exits on its own once
  * started - this is a real, bounded smoke-test window, not "wait for
  * completion"), then force-kills it and reports what its console said.
+ * @param {object} [opts]
+ * @param {number} [opts.timeoutMs=15000]
+ * @param {boolean} [opts.expectSmokeResults=false] - when true (the
+ *   mod-under-test declares at least one real entity/block), "Server
+ *   started." alone is NOT treated as a stop signal - a real, live-caught
+ *   race confirmed that line can print before OR-Track Q3's own
+ *   MARKER_DONE, which would otherwise cut the wait short before the smoke
+ *   test's real per-target results ever appear. Only a real MARKER_DONE or
+ *   a genuine fatal error stops the wait early in that case.
  * @returns {Promise<{ok:boolean, errors:string[], packLoaded:boolean, rawOutput:string}>}
  */
-function bootAndCollect(bdsDir, { timeoutMs = 15000 } = {}) {
+function bootAndCollect(bdsDir, { timeoutMs = 15000, expectSmokeResults = false } = {}) {
     return new Promise((resolve, reject) => {
         // A real, reproduced bug: spawn() resolves a bare executable NAME
         // against PATH, not against `cwd` - "bedrock_server.exe" with only
@@ -211,12 +271,22 @@ function bootAndCollect(bdsDir, { timeoutMs = 15000 } = {}) {
             resolve(analyzeOutput(output));
         };
 
-        // Real success/failure both surface within a few seconds of boot -
-        // "Server started." on success, a [Scripting][ERROR] line on
-        // failure. Poll for either, but always bound by timeoutMs as a
-        // hard ceiling regardless (BDS itself never exits on its own).
+        // Real success/failure surface at different points: a fatal error
+        // can happen at any point during boot; the real OR-Track Q3 smoke
+        // test's own MARKER_DONE line only appears once world load AND
+        // every entity/block attempt has genuinely finished. "Server
+        // started." is only trusted as its OWN stop signal when the caller
+        // doesn't expect real smoke results at all (a resource-only pack,
+        // or a mod declaring zero entities/blocks) - live-confirmed that
+        // "Server started." can print BEFORE MARKER_DONE, so honoring it
+        // unconditionally would cut the wait short before real smoke
+        // results ever appear. Always bound by timeoutMs as a hard ceiling
+        // regardless (BDS itself never exits on its own).
         const poll = setInterval(() => {
-            if (/Server started\./.test(output) || FATAL_LOG_PATTERNS.some(p => p.test(output))) {
+            const fatal = FATAL_LOG_PATTERNS.some(p => p.test(output));
+            const done = output.includes(MARKER_DONE);
+            const startedEnough = !expectSmokeResults && /Server started\./.test(output);
+            if (fatal || done || startedEnough) {
                 clearInterval(poll);
                 setTimeout(finish, 500); // brief settle window to catch a same-tick error line
             }
@@ -251,8 +321,16 @@ async function runSmokeTest(built, { bdsDir, openrockRoot = path.join(__dirname,
             "Set OPENROCK_BDS_DIR, pass { bdsDir }, place one at a sibling \"bds-test\" directory, or use --no-test-server to skip this check."
         );
     }
-    installIntoBds(dir, built);
-    const result = await bootAndCollect(dir, { timeoutMs });
+    const { hasSmokeTargets } = installIntoBds(dir, built);
+    const result = await bootAndCollect(dir, { timeoutMs, expectSmokeResults: hasSmokeTargets });
+    // A real entity/block target list that never produced a MARKER_DONE
+    // (e.g. the harness pack itself failed to load, or the world genuinely
+    // hung before finishing) is its own real failure - "the server didn't
+    // crash" is not the same guarantee as "every declared entity/block was
+    // genuinely tested."
+    if (hasSmokeTargets && result.ok && !result.smokeDone) {
+        return { ...result, ok: false, bdsDir: dir, errors: [...result.errors, "OR-Track Q3 smoke test never completed (no MARKER_DONE) despite the mod declaring real entities/blocks to test"] };
+    }
     return { ...result, bdsDir: dir };
 }
 
