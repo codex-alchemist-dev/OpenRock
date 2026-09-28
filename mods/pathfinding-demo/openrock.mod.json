@@ -1,0 +1,21 @@
+{
+  "openrockVersion": 1,
+  "kind": "mod",
+  "name": "openrock-pathfinding-demo",
+  "version": "0.1.0",
+  "namespace": "prd",
+  "packs": {
+    "behavior": {
+      "folder": "OpenRock Pathfinding Demo B",
+      "uuid": "140c4475-97ae-4e55-b84c-3ca1cf081039",
+      "dataModuleUuid": "c6ebb68d-5706-4d69-889e-74854d46b5f1",
+      "scriptModuleUuid": "26eb55bb-9aaf-4f46-866e-0c333a3f43d9"
+    },
+    "resource": {
+      "folder": "OpenRock Pathfinding Demo R",
+      "uuid": "683ce001-19d9-4c48-81aa-264a59e19f89",
+      "moduleUuid": "e870f319-0180-4400-9d4d-8433b39cfa07"
+    }
+  },
+  "content": { "scriptsDir": "scripts", "bpOverlayDir": "bp", "rpOverlayDir": "rp" }
+}

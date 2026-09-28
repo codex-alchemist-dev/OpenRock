@@ -1,0 +1,13 @@
+{
+  "format_version": "1.20.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "{{ns}}:nav_test",
+      "materials": { "default": "entity_alphatest" },
+      "textures": { "default": "textures/entity/zombie/zombie" },
+      "geometry": { "default": "geometry.humanoid.custom" },
+      "render_controllers": ["controller.render.{{ns}}_nav_test"],
+      "spawn_egg": { "base_color": "#3355ff", "overlay_color": "#ffffff" }
+    }
+  }
+}

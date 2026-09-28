@@ -1,0 +1,276 @@
+{
+  "format_version": "1.20.0",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "{{ns}}:nav_test",
+      "is_spawnable": true,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "component_groups": {
+      "openrock:slot_0": {
+        "minecraft:behavior.follow_mob": {
+          "priority": 1,
+          "speed_multiplier": 1,
+          "stop_distance": 1,
+          "search_range": 64,
+          "filters": {
+            "test": "has_tag",
+            "subject": "other",
+            "value": "openrock_anchor_slot_0"
+          }
+        }
+      },
+      "openrock:slot_1": {
+        "minecraft:behavior.follow_mob": {
+          "priority": 1,
+          "speed_multiplier": 1,
+          "stop_distance": 1,
+          "search_range": 64,
+          "filters": {
+            "test": "has_tag",
+            "subject": "other",
+            "value": "openrock_anchor_slot_1"
+          }
+        }
+      },
+      "openrock:slot_2": {
+        "minecraft:behavior.follow_mob": {
+          "priority": 1,
+          "speed_multiplier": 1,
+          "stop_distance": 1,
+          "search_range": 64,
+          "filters": {
+            "test": "has_tag",
+            "subject": "other",
+            "value": "openrock_anchor_slot_2"
+          }
+        }
+      },
+      "openrock:slot_3": {
+        "minecraft:behavior.follow_mob": {
+          "priority": 1,
+          "speed_multiplier": 1,
+          "stop_distance": 1,
+          "search_range": 64,
+          "filters": {
+            "test": "has_tag",
+            "subject": "other",
+            "value": "openrock_anchor_slot_3"
+          }
+        }
+      },
+      "openrock:slot_4": {
+        "minecraft:behavior.follow_mob": {
+          "priority": 1,
+          "speed_multiplier": 1,
+          "stop_distance": 1,
+          "search_range": 64,
+          "filters": {
+            "test": "has_tag",
+            "subject": "other",
+            "value": "openrock_anchor_slot_4"
+          }
+        }
+      }
+    },
+    "components": {
+      "minecraft:type_family": {
+        "family": [
+          "{{ns}}_nav_test",
+          "mob"
+        ]
+      },
+      "minecraft:health": {
+        "value": 20,
+        "max": 20
+      },
+      "minecraft:movement": {
+        "value": 0.25
+      },
+      "minecraft:navigation.walk": {
+        "can_path_over_water": true,
+        "avoid_water": false,
+        "can_pass_doors": true,
+        "can_open_doors": true,
+        "avoid_damage_blocks": true
+      },
+      "minecraft:movement.basic": {},
+      "minecraft:jump.static": {},
+      "minecraft:can_climb": {},
+      "minecraft:physics": {},
+      "minecraft:pushable": {
+        "is_pushable": true,
+        "is_pushable_by_piston": true
+      },
+      "minecraft:collision_box": {
+        "width": 0.6,
+        "height": 1.8
+      },
+      "minecraft:knockback_resistance": {
+        "value": 1
+      },
+      "minecraft:environment_sensor": {
+        "triggers": [
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_0"
+            },
+            "event": "openrock:activate_slot_0"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_0",
+              "operator": "!="
+            },
+            "event": "openrock:deactivate_slot_0"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_1"
+            },
+            "event": "openrock:activate_slot_1"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_1",
+              "operator": "!="
+            },
+            "event": "openrock:deactivate_slot_1"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_2"
+            },
+            "event": "openrock:activate_slot_2"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_2",
+              "operator": "!="
+            },
+            "event": "openrock:deactivate_slot_2"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_3"
+            },
+            "event": "openrock:activate_slot_3"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_3",
+              "operator": "!="
+            },
+            "event": "openrock:deactivate_slot_3"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_4"
+            },
+            "event": "openrock:activate_slot_4"
+          },
+          {
+            "filters": {
+              "test": "has_tag",
+              "subject": "self",
+              "value": "openrock_navigating_slot_4",
+              "operator": "!="
+            },
+            "event": "openrock:deactivate_slot_4"
+          }
+        ]
+      }
+    },
+    "events": {
+      "openrock:activate_slot_0": {
+        "add": {
+          "component_groups": [
+            "openrock:slot_0"
+          ]
+        }
+      },
+      "openrock:deactivate_slot_0": {
+        "remove": {
+          "component_groups": [
+            "openrock:slot_0"
+          ]
+        }
+      },
+      "openrock:activate_slot_1": {
+        "add": {
+          "component_groups": [
+            "openrock:slot_1"
+          ]
+        }
+      },
+      "openrock:deactivate_slot_1": {
+        "remove": {
+          "component_groups": [
+            "openrock:slot_1"
+          ]
+        }
+      },
+      "openrock:activate_slot_2": {
+        "add": {
+          "component_groups": [
+            "openrock:slot_2"
+          ]
+        }
+      },
+      "openrock:deactivate_slot_2": {
+        "remove": {
+          "component_groups": [
+            "openrock:slot_2"
+          ]
+        }
+      },
+      "openrock:activate_slot_3": {
+        "add": {
+          "component_groups": [
+            "openrock:slot_3"
+          ]
+        }
+      },
+      "openrock:deactivate_slot_3": {
+        "remove": {
+          "component_groups": [
+            "openrock:slot_3"
+          ]
+        }
+      },
+      "openrock:activate_slot_4": {
+        "add": {
+          "component_groups": [
+            "openrock:slot_4"
+          ]
+        }
+      },
+      "openrock:deactivate_slot_4": {
+        "remove": {
+          "component_groups": [
+            "openrock:slot_4"
+          ]
+        }
+      }
+    }
+  }
+}
