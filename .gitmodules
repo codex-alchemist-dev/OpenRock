@@ -4,3 +4,57 @@
 [submodule "vendor/mclite"]
 	path = vendor/mclite
 	url = https://github.com/codex-alchemist-dev/MCLite.git
+[submodule "libs/terrain"]
+	path = libs/terrain
+	url = https://github.com/codex-alchemist-dev/OpenRock-Terrain.git
+[submodule "libs/route-analysis"]
+	path = libs/route-analysis
+	url = https://github.com/codex-alchemist-dev/OpenRock-RouteAnalysis.git
+[submodule "libs/datagen"]
+	path = libs/datagen
+	url = https://github.com/codex-alchemist-dev/OpenRock-Datagen.git
+[submodule "libs/permissions"]
+	path = libs/permissions
+	url = https://github.com/codex-alchemist-dev/OpenRock-Permissions.git
+[submodule "libs/i18n"]
+	path = libs/i18n
+	url = https://github.com/codex-alchemist-dev/OpenRock-I18n.git
+[submodule "libs/registries"]
+	path = libs/registries
+	url = https://github.com/codex-alchemist-dev/OpenRock-Registries.git
+[submodule "libs/compat"]
+	path = libs/compat
+	url = https://github.com/codex-alchemist-dev/OpenRock-Compat.git
+[submodule "libs/pathfinding"]
+	path = libs/pathfinding
+	url = https://github.com/codex-alchemist-dev/OpenRock-Pathfinding.git
+[submodule "libs/molang-safe"]
+	path = libs/molang-safe
+	url = https://github.com/codex-alchemist-dev/OpenRock-MolangSafe.git
+[submodule "libs/scan-scheduler"]
+	path = libs/scan-scheduler
+	url = https://github.com/codex-alchemist-dev/OpenRock-ScanScheduler.git
+[submodule "libs/inventory-serialization"]
+	path = libs/inventory-serialization
+	url = https://github.com/codex-alchemist-dev/OpenRock-InventorySerialization.git
+[submodule "libs/capabilities"]
+	path = libs/capabilities
+	url = https://github.com/codex-alchemist-dev/OpenRock-Capabilities.git
+[submodule "libs/networking"]
+	path = libs/networking
+	url = https://github.com/codex-alchemist-dev/OpenRock-Networking.git
+[submodule "libs/events"]
+	path = libs/events
+	url = https://github.com/codex-alchemist-dev/OpenRock-Events.git
+[submodule "libs/perception"]
+	path = libs/perception
+	url = https://github.com/codex-alchemist-dev/OpenRock-Perception.git
+[submodule "libs/formation"]
+	path = libs/formation
+	url = https://github.com/codex-alchemist-dev/OpenRock-Formation.git
+[submodule "libs/entity-safety"]
+	path = libs/entity-safety
+	url = https://github.com/codex-alchemist-dev/OpenRock-EntitySafety.git
+[submodule "libs/config"]
+	path = libs/config
+	url = https://github.com/codex-alchemist-dev/OpenRock-Config.git
