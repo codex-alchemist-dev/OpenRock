@@ -283,16 +283,31 @@ function cmdLog(modDir, flags) {
 }
 
 // OR-Track C2 Stage 1: orchestrate Mojang's OWN official "minecraft-js"
-// VS Code debugger extension rather than building a DAP client from
-// scratch - pure glue, generating the exact launch.json shape that
-// extension expects (a real Debug Adapter Protocol client against
-// Minecraft's built-in script debug port, 19144). This is also the exact
-// source-map wiring OR-Track D2's future TypeScript authoring pipeline
-// will need, so building it now isn't wasted even before real .map files
-// exist. `mode` defaults to "listen" - double-check this against Mojang's
-// own current minecraft-debugger README before relying on it, since which
-// side initiates the connection is the one detail here not independently
-// re-verified in this pass.
+// VS Code debugger extension (github.com/Mojang/minecraft-debugger) rather
+// than building a DAP client from scratch - pure glue, generating the
+// exact launch.json shape that extension expects (a real Debug Adapter
+// Protocol client against Minecraft's built-in script debug port, 19144).
+// This is also the exact source-map wiring the entity/manifest DSL's real
+// esbuild `sourcemap: "linked"` output already produces, so this isn't
+// wasted scaffolding.
+//
+// Confirmed via a real, direct fetch of Mojang's own current README (not
+// guessed, not left as a "double-check later" note): which side initiates
+// the connection is genuinely different per real target -
+//   - Minecraft CLIENT: VS Code LISTENS ("mode": "listen", the default
+//     here), the client connects OUT via its own `/script debugger connect`
+//     slash command.
+//   - Bedrock Dedicated Server (this project's own bds-test/ instance):
+//     BDS LISTENS instead. Real, LIVE-VERIFIED mechanism (booted bds-test/
+//     with allow-inbound-script-debugging=true +
+//     script-debugger-auto-attach=listen in server.properties, confirmed
+//     via a real TCP probe): BDS opens port 19144 automatically at level
+//     load ("[Scripting] Debugger auto-attach... is still listening" in
+//     its own console, port genuinely accepting connections) - no BDS
+//     console command needed at all, which matters because this project's
+//     own bdsTestHarness.js already established BDS has no reliable
+//     programmatic stdin channel. VS Code then CONNECTS OUT
+//     ("mode": "connect", via --mode=connect).
 function cmdDebug(modDir, flags) {
     if (!flags.includes("--launch-vscode")) {
         console.log("Usage: openrock debug --launch-vscode [--mode=connect|listen] <modDir>");
@@ -308,13 +323,22 @@ function cmdDebug(modDir, flags) {
     const vscodeDir = path.join(modDir, ".vscode");
     fs.mkdirSync(vscodeDir, { recursive: true });
     const launchJsonPath = path.join(vscodeDir, "launch.json");
-    const existing = fs.existsSync(launchJsonPath) ? JSON.parse(fs.readFileSync(launchJsonPath, "utf8")) : { version: "0.2.0", configurations: [] };
+    // "0.3.0" is the real, current schema version Mojang's own README
+    // examples use as of this fetch - bumped from the earlier, stale "0.2.0".
+    const existing = fs.existsSync(launchJsonPath) ? JSON.parse(fs.readFileSync(launchJsonPath, "utf8")) : { version: "0.3.0", configurations: [] };
     const scriptsSubdir = manifest.content?.scriptsDir ? path.relative(modDir, path.join(modDir, manifest.content.scriptsDir)).split(path.sep).join("/") : "scripts";
     const config = {
         type: "minecraft-js",
         request: "attach",
         mode,
         port: 19144,
+        // targetModuleUuid: real, Mojang-documented optional field -
+        // "important to use if you are developing add-ons in Minecraft
+        // while there are multiple behavior packs with script active",
+        // which is exactly OpenRock's own multi-mod dev-mode scenario.
+        // OpenRock always knows this value already (this mod's own real
+        // scriptModuleUuid) - no reason to leave it unset.
+        targetModuleUuid: manifest.packs.behavior.scriptModuleUuid,
         sourceMapRoot: `\${workspaceFolder}/${scriptsSubdir}/`,
         generatedSourceRoot: `\${workspaceFolder}/build/${manifest.packs.behavior.folder}/scripts/`,
     };
@@ -323,7 +347,13 @@ function cmdDebug(modDir, flags) {
     else existing.configurations.push({ name: `Debug ${manifest.name}`, ...config });
     fs.writeFileSync(launchJsonPath, JSON.stringify(existing, null, 2) + "\n");
     console.log(`[${stamp()}] Wrote ${launchJsonPath}`);
-    console.log(`Install Mojang's "Minecraft Bedrock Edition" VS Code extension, enable the world's script debugger, then Run > Start Debugging ("Debug ${manifest.name}").`);
+
+    if (mode === "listen") {
+        console.log(`Install Mojang's "Minecraft Bedrock Debugger" VS Code extension, hit F5 ("Debug ${manifest.name}") to enter listen mode, load a world with this pack in Minecraft, then run the slash command: /script debugger connect`);
+    } else {
+        console.log("Real BDS setup (live-verified, no console access needed): in your BDS instance's server.properties, set allow-inbound-script-debugging=true and script-debugger-auto-attach=listen - BDS then opens port 19144 automatically at every level load.");
+        console.log(`Then, in VS Code, install Mojang's "Minecraft Bedrock Debugger" extension and hit F5 ("Debug ${manifest.name}") to connect.`);
+    }
 }
 
 async function main() {

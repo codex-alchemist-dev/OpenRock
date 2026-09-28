@@ -203,6 +203,8 @@ test("openrock debug --launch-vscode: writes a real launch.json for Mojang's min
     assert.strictEqual(config.port, 19144);
     assert.strictEqual(config.mode, "listen");
     assert.strictEqual(config.name, "Debug cli-test-mod");
+    assert.strictEqual(launchJson.version, "0.3.0", "must match Mojang's own current real launch.json schema version");
+    assert.ok(config.targetModuleUuid, "must include the mod's own real scriptModuleUuid - Mojang's own documented field for disambiguating multiple active behavior packs' script modules");
 });
 
 test("openrock debug --launch-vscode --mode=connect: honors an explicit mode, rejects a bad one", () => {
