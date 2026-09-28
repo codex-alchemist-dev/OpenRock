@@ -13,6 +13,7 @@
 //   openrock deploy <modDir>   build + sync into Minecraft's development pack folders
 //   openrock dev    <modDir>   deploy, then watch the mod and its vendored
 //                              dependencies for changes and redeploy automatically
+//                              (incrementally, where possible - OR-Track Q6)
 //   openrock log    <modDir>   show this mod's errors/warnings from Minecraft's
 //                              newest content log (--all: every pack; --follow: keep
 //                              tailing; --filter=<regex>: narrow further, OR-Track C1)
@@ -23,387 +24,42 @@
 // OR-Track Q: `build`/`check` ALSO run a real automated Bedrock Dedicated
 // Server smoke test by default (src/bdsTestHarness.js) - the just-built
 // pack is installed into a real local BDS instance and booted for real,
-// checking its actual console output for real script/content load errors,
-// the exact mechanism that caught a genuine, reproduced esbuild
-// tree-shaking bug tonight that every Node-side test missed. Requires a
-// real local BDS instance: explicit OPENROCK_BDS_DIR, a sibling "bds-test"
-// dev-server directory, OR-Track Q1's own real auto-install cache
-// (tools/bds/install.js - populated by `npm install`'s postinstall hook,
-// or installed live on THIS first use if that hook was skipped/blocked) -
-// in that order. Only if every real path (including a live install
-// attempt) fails is this a one-line skip note, never a hard failure (so an
-// offline machine can still build). Pass --no-test-server to skip
-// explicitly, e.g. for fast dev-loop iteration.
+// checking its actual console output for real script/content load errors.
+// Requires a real local BDS instance: explicit OPENROCK_BDS_DIR, a sibling
+// "bds-test" dev-server directory, OR-Track Q1's own real auto-install
+// cache (tools/bds/install.js) - in that order. Only if every real path
+// (including a live install attempt) fails is this a one-line skip note,
+// never a hard failure. Pass --no-test-server to skip explicitly.
 //
 // <modDir> is the folder containing openrock.mod.json (defaults to the
 // current directory). A mod's "library"-type dependencies are resolved
-// against OpenRock's own bundled libs/* by name automatically
-// (resolveBundledLibraryDirs); its "submodule"-type dependencies resolve
-// against <modDir>/vendor/ by convention.
+// against OpenRock's own bundled libs/* by name automatically; its
+// "submodule"-type dependencies resolve against <modDir>/vendor/ by
+// convention.
 //
 // `dev` also accepts a MODS FOLDER (a directory whose immediate
 // subdirectories are each their own mod, rather than a mod itself) -
-// OR-Track F1's multi-mod dev mode: every discovered mod gets its own
-// independent watch+debounce+redeploy loop (one mod's rebuild never blocks
-// another's), and resolveManifestSet() runs across the WHOLE discovered
-// set once at startup so a `breaks` conflict between two mods in the
-// folder is caught before either deploys.
+// OR-Track F1's multi-mod dev mode.
+//
+// This file is deliberately a thin dispatcher, per the project's own
+// standing modularity rule: every real command's implementation lives in
+// its own module under src/commands/, each independently requireable and
+// testable, sharing only src/commands/shared.js's small, genuinely common
+// helpers (stamp/comMojang/buildOpts/maybeRunSmokeTest). Nothing about a
+// specific command's own logic lives here.
 "use strict";
 
-const fs = require("fs");
 const path = require("path");
-const os = require("os");
-const { buildMod, createIncrementalBuild, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree } = require("../src/buildPipeline.js");
-const { resolveManifestSet } = require("../src/resolver.js");
-const { zip } = require("../src/zip.js");
-const { loadManifestFile } = require("../src/manifest.js");
-const { runSmokeTest } = require("../src/bdsTestHarness.js");
+const cmdBuild = require("../src/commands/build.js");
+const cmdCheck = require("../src/commands/check.js");
+const cmdExport = require("../src/commands/export.js");
+const cmdDeploy = require("../src/commands/deploy.js");
+const cmdDev = require("../src/commands/dev.js");
+const cmdLog = require("../src/commands/log.js");
+const cmdDebug = require("../src/commands/debug.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
 const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug"];
-
-function stamp() { return new Date().toTimeString().slice(0, 8); }
-
-function comMojang() {
-    if (process.env.OPENROCK_COM_MOJANG) return process.env.OPENROCK_COM_MOJANG;
-    const appdata = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-    const candidates = [
-        path.join(appdata, "Minecraft Bedrock", "Users", "Shared", "games", "com.mojang"),
-        path.join(process.env.LOCALAPPDATA || "", "Packages", "Microsoft.MinecraftUWP_8wekyb3d8bbwe", "LocalState", "games", "com.mojang"),
-    ];
-    const found = candidates.find(c => fs.existsSync(c));
-    if (!found) throw new Error("Can't find Minecraft's com.mojang folder - set OPENROCK_COM_MOJANG to its path.");
-    return found;
-}
-
-function buildOpts(modDir) {
-    return { vendorDir: path.join(modDir, "vendor"), libraryDirs: resolveBundledLibraryDirs(OPENROCK_ROOT) };
-}
-
-// OR-Track Q: runs the real BDS smoke test unless --no-test-server was
-// passed. A missing BDS instance is a one-line skip note (never blocks a
-// machine with none installed); a REAL failure (the pack failed to load,
-// or a script threw during load) throws, failing the whole command - this
-// is the actual "catch it before the user ever sees it" gate.
-async function maybeRunSmokeTest(r, flags, quiet = false) {
-    if (flags.includes("--no-test-server")) return;
-    let result;
-    try {
-        result = await runSmokeTest(r);
-    } catch (e) {
-        if (/no real BDS instance found/.test(e.message)) {
-            if (!quiet) console.log(`[${stamp()}] (skipping BDS smoke test - ${e.message})`);
-            return;
-        }
-        throw e;
-    }
-    if (!result.ok) {
-        const detail = result.errors.length ? result.errors.join("\n") : "pack never reached \"Pack Stack\" - it didn't load at all.";
-        throw new Error(`BDS smoke test FAILED for "${r.manifest.name}" (real server boot at ${result.bdsDir}):\n${detail}`);
-    }
-    if (!quiet) console.log(`[${stamp()}] BDS smoke test passed - real server booted cleanly with "${r.manifest.name}" loaded (${result.bdsDir}).`);
-}
-
-// OR-Track G: a resource-pack-only mod (packs.behavior === false) has
-// r.bp === null - every command below only touches the behavior pack half
-// when it's genuinely there.
-async function cmdBuild(modDir, flags = []) {
-    const t0 = Date.now();
-    const r = buildMod(modDir, buildOpts(modDir));
-    const out = path.join(modDir, "build");
-    const a = r.bp ? writeTree(r.bp, path.join(out, r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
-    const b = writeTree(r.rp, path.join(out, r.manifest.packs.resource.folder));
-    console.log(`[${stamp()}] Built ${r.manifest.name} in ${Date.now() - t0}ms -> ${out} (${a.written + b.written} written, ${a.removed + b.removed} removed)`);
-    await maybeRunSmokeTest(r, flags);
-    return r;
-}
-
-// OR-Track H1: a --json mode, for piping into other tools rather than
-// scraping human-readable text - `check` is the first command to get one
-// (the one most likely to be scripted, e.g. as a pre-commit/CI gate).
-async function cmdCheck(modDir, flags = []) {
-    const t0 = Date.now();
-    const r = buildMod(modDir, buildOpts(modDir));
-    const ms = Date.now() - t0;
-    await maybeRunSmokeTest(r, flags, flags.includes("--json"));
-    if (flags.includes("--json")) {
-        console.log(JSON.stringify({ ok: true, name: r.manifest.name, bpFiles: r.bp ? r.bp.size : null, rpFiles: r.rp.size, ms }));
-    } else {
-        const bpNote = r.bp ? `${r.bp.size} BP + ` : "(resource-pack-only) ";
-        console.log(`OK - ${r.manifest.name}: ${bpNote}${r.rp.size} RP files, all checks passed (${ms}ms).`);
-    }
-    return r;
-}
-
-function cmdDeploy(modDir, quiet = false) {
-    const r = buildMod(modDir, buildOpts(modDir));
-    const root = comMojang();
-    const a = r.bp ? writeTree(r.bp, path.join(root, "development_behavior_packs", r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
-    const b = writeTree(r.rp, path.join(root, "development_resource_packs", r.manifest.packs.resource.folder));
-    const changed = a.written + b.written + a.removed + b.removed;
-    if (!quiet || changed) console.log(`[${stamp()}] Deployed ${r.manifest.name}: ${a.written + b.written} file(s) updated, ${a.removed + b.removed} removed.`);
-    return { r, changed };
-}
-
-function cmdExport(modDir) {
-    const r = buildMod(modDir, buildOpts(modDir));
-    const entries = [];
-    const packs = r.bp ? [[r.manifest.packs.behavior.folder, r.bp], [r.manifest.packs.resource.folder, r.rp]] : [[r.manifest.packs.resource.folder, r.rp]];
-    for (const [folder, map] of packs) {
-        for (const [rel, data] of map) entries.push({ name: `${folder}/${rel}`, data });
-    }
-    const dist = path.join(modDir, "dist");
-    fs.mkdirSync(dist, { recursive: true });
-    const file = path.join(dist, `${r.manifest.name} ${r.manifest.version}.mcaddon`);
-    fs.writeFileSync(file, zip(entries));
-    console.log(`[${stamp()}] Exported ${file} (${(fs.statSync(file).size / 1024 / 1024).toFixed(1)} MB)`);
-}
-
-// One independent watch+debounce+redeploy loop for a single mod directory
-// - shared by both dev modes below, so a mods/-folder mod behaves exactly
-// like a standalone one, just with its own isolated watcher.
-//
-// OR-Track Q6, made real: ONE createIncrementalBuild() instance lives for
-// this watcher's entire lifetime. A real fs.watch event names the file
-// that changed - that path is queued and handed to `inc.rebuild(absPath)`
-// on the next debounced run, which re-renders ONLY the one real compile
-// unit that file belongs to (see buildPipeline.js's classifyChange()),
-// never a full buildMod() pass, unless the change can't be safely
-// attributed to one unit (inc.rebuild() itself falls back to a real full
-// rebuild in that case - this loop never has to guess). The 30s safety-net
-// tick (some editors/sync tools miss real fs.watch events entirely) is the
-// one deliberate exception: since we don't know what, if anything, was
-// missed, it forces one real FULL rebuild via inc.build() to self-heal -
-// correctness over speed for that one periodic case.
-function watchAndDeploy(modDir, { onError = e => console.error(`[${stamp()}] Not deployed - ${e.message}`) } = {}) {
-    const inc = createIncrementalBuild(modDir, buildOpts(modDir));
-    let pendingFiles = [];
-    let forceFull = false;
-    let timer = null, running = false, again = false;
-
-    function deployResult(r) {
-        const root = comMojang();
-        const a = r.bp ? writeTree(r.bp, path.join(root, "development_behavior_packs", r.manifest.packs.behavior.folder)) : { written: 0, removed: 0 };
-        const b = writeTree(r.rp, path.join(root, "development_resource_packs", r.manifest.packs.resource.folder));
-        return { r, changed: a.written + b.written + a.removed + b.removed };
-    }
-
-    const run = () => {
-        if (running) { again = true; return; }
-        running = true;
-        const files = pendingFiles;
-        pendingFiles = [];
-        const doFull = forceFull || files.length === 0;
-        forceFull = false;
-        try {
-            let r;
-            if (doFull) {
-                r = inc.build();
-            } else {
-                for (const f of files) r = inc.rebuild(f);
-            }
-            const { changed } = deployResult(r);
-            if (changed) console.log(`[${stamp()}] Deployed ${r.manifest.name}${inc.isFullBuild() ? "" : " (incremental)"}: real update.`);
-        } catch (e) { onError(e); }
-        running = false;
-        if (again) { again = false; schedule(); }
-    };
-    const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
-    fs.watch(modDir, { recursive: true }, (evt, file) => {
-        if (!file) { forceFull = true; schedule(); return; } // some platforms don't report a filename at all - can't classify it, so play it safe with a real full rebuild
-        if (/(^|[\\/])(\.git|node_modules|build|dist|\.(entity|manifest)-dsl-dist)([\\/]|$)/.test(file)) return;
-        pendingFiles.push(path.join(modDir, file));
-        schedule();
-    });
-    setInterval(() => { forceFull = true; schedule(); }, 30000); // safety net - see comment above
-    return {
-        schedule,
-        // The REAL initial deploy, using this SAME incremental builder
-        // instance's first .build() call - so `dev` never pays for a full
-        // build twice at startup (once here, once again on the first save).
-        deployInitial() {
-            const r = inc.build();
-            const { changed } = deployResult(r);
-            console.log(`[${stamp()}] Deployed ${r.manifest.name}: ${changed} file(s) updated.`);
-            return r;
-        },
-    };
-}
-
-function cmdDevSingle(modDir) {
-    // A broken FIRST deploy is reported but not fatal - the watcher still
-    // starts, so fixing the problem and saving triggers a real redeploy
-    // without needing to restart `dev`. loadManifestFile() alone still
-    // throws (and correctly aborts `dev` entirely) if even the manifest
-    // itself is unreadable - there's nothing to watch without that.
-    loadManifestFile(modDir);
-    const watcher = watchAndDeploy(modDir);
-    try { watcher.deployInitial(); }
-    catch (e) { console.error(`[${stamp()}] ${e.message}`); }
-    console.log(`[${stamp()}] Watching:\n  ${modDir}\nChanges redeploy automatically (incrementally, where possible). After a script change use /reload in-game; new entities/items/textures need a world rejoin. Ctrl+C to stop.`);
-}
-
-// OR-Track F1: every immediate subdirectory of `modsDir` with its own
-// openrock.mod.json gets its own independent watch loop - one mod's
-// rebuild never blocks or fails another's. resolveManifestSet() runs once
-// across the WHOLE discovered set up front so a cross-mod `breaks`
-// conflict is caught before anything deploys, not discovered piecemeal
-// later.
-function cmdDevMulti(modsDir) {
-    const found = discoverMods(modsDir);
-    if (found.length === 0) throw new Error(`No mods found in ${modsDir} (each subdirectory needs its own openrock.mod.json)`);
-    resolveManifestSet(found); // throws loudly on a cross-mod "breaks" conflict - deliberately not caught
-
-    for (const { dir } of found) {
-        const watcher = watchAndDeploy(dir, { onError: e => console.error(`[${stamp()}] ${path.basename(dir)}: not deployed - ${e.message}`) });
-        try { watcher.deployInitial(); }
-        catch (e) { console.error(`[${stamp()}] ${path.basename(dir)}: ${e.message}`); }
-    }
-    console.log(`[${stamp()}] Watching ${found.length} mod(s) in ${modsDir}:\n  ${found.map(f => f.manifest.name).join("\n  ")}\nEach mod redeploys independently on its own changes (incrementally, where possible). Ctrl+C to stop.`);
-}
-
-function cmdDev(dir) {
-    let isSinglePackage = false;
-    try { isSinglePackage = isBuildablePackage(loadManifestFile(dir).manifest); } catch { /* not a package dir itself - try treating it as a mods/ folder */ }
-    return isSinglePackage ? cmdDevSingle(dir) : cmdDevMulti(dir);
-}
-
-function logDir() {
-    if (process.env.OPENROCK_LOG_DIR) return process.env.OPENROCK_LOG_DIR;
-    const appdata = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-    const dirs = [path.join(appdata, "Minecraft Bedrock", "logs"), path.join(process.env.LOCALAPPDATA || "", "Packages", "Microsoft.MinecraftUWP_8wekyb3d8bbwe", "LocalState", "logs")];
-    return dirs.find(d => fs.existsSync(d)) ?? null;
-}
-
-// OR-Track C1: --filter=<regex> narrows the same tailer to a caller-chosen
-// pattern, on top of (or, with --all, instead of) the usual project-scoped
-// needle match - no new protocol work, purely a filter refinement over the
-// existing content-log mechanism.
-function parseLogFilter(flags) {
-    const raw = flags.find(f => f.startsWith("--filter="));
-    if (!raw) return null;
-    try { return new RegExp(raw.slice("--filter=".length)); }
-    catch (e) { throw new Error(`--filter: invalid regular expression: ${e.message}`); }
-}
-
-function cmdLog(modDir, flags) {
-    const dir = logDir();
-    if (!dir) throw new Error("Can't find Minecraft's logs folder.");
-    const newest = () => fs.readdirSync(dir).filter(f => /^ContentLog.*\.txt$/.test(f))
-        .map(f => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs })).sort((a, b) => b.t - a.t)[0]?.f;
-    const file = newest();
-    if (!file) { console.log("No content log yet - enable Settings > Creator > Content Log File, then play."); return; }
-    let manifest = null;
-    try { manifest = loadManifestFile(modDir).manifest; } catch { /* show everything */ }
-    const needles = manifest && !flags.includes("--all")
-        ? [...(manifest.packs.behavior !== false ? [manifest.packs.behavior.folder] : []), manifest.packs.resource.folder, `${manifest.namespace}:`, "[Scripting]", "[UI]"]
-        : null;
-    const customFilter = parseLogFilter(flags);
-    const clean = l => l.replace(/%APPDATA%\/Minecraft Bedrock\/Users\/Shared\/games\/com\.mojang\/development_(behavior|resource)_packs\//g, "");
-    const show = text => {
-        const counts = new Map();
-        for (const raw of text.split(/\r?\n/)) {
-            if (!/\[(error|warning)\]/i.test(raw)) continue;
-            if (needles && !needles.some(n => raw.includes(n))) continue;
-            if (customFilter && !customFilter.test(raw)) continue;
-            const key = clean(raw.replace(/^\d\d:\d\d:\d\d/, "")).trim();
-            counts.set(key, (counts.get(key) ?? 0) + 1);
-        }
-        for (const [line, n] of counts) console.log(`${n > 1 ? `${String(n).padStart(3)}x ` : "     "}${line}`);
-        return counts.size;
-    };
-    const full = path.join(dir, file);
-    console.log(`${file}${needles ? ` (filtered to ${manifest.name}; --all for everything)` : ""}${customFilter ? ` (--filter=${customFilter.source})` : ""}:`);
-    const n = show(fs.readFileSync(full, "utf8"));
-    if (!n) console.log("     no errors or warnings");
-    if (!flags.includes("--follow")) return;
-    let size = fs.statSync(full).size;
-    console.log(`[${stamp()}] following ${file} - Ctrl+C to stop`);
-    setInterval(() => {
-        const now = fs.statSync(full).size;
-        if (now <= size) return;
-        const fd = fs.openSync(full, "r");
-        const buf = Buffer.alloc(now - size);
-        fs.readSync(fd, buf, 0, buf.length, size);
-        fs.closeSync(fd);
-        size = now;
-        show(buf.toString("utf8"));
-    }, 1000);
-}
-
-// OR-Track C2 Stage 1: orchestrate Mojang's OWN official "minecraft-js"
-// VS Code debugger extension (github.com/Mojang/minecraft-debugger) rather
-// than building a DAP client from scratch - pure glue, generating the
-// exact launch.json shape that extension expects (a real Debug Adapter
-// Protocol client against Minecraft's built-in script debug port, 19144).
-// This is also the exact source-map wiring the entity/manifest DSL's real
-// esbuild `sourcemap: "linked"` output already produces, so this isn't
-// wasted scaffolding.
-//
-// Confirmed via a real, direct fetch of Mojang's own current README (not
-// guessed, not left as a "double-check later" note): which side initiates
-// the connection is genuinely different per real target -
-//   - Minecraft CLIENT: VS Code LISTENS ("mode": "listen", the default
-//     here), the client connects OUT via its own `/script debugger connect`
-//     slash command.
-//   - Bedrock Dedicated Server (this project's own bds-test/ instance):
-//     BDS LISTENS instead. Real, LIVE-VERIFIED mechanism (booted bds-test/
-//     with allow-inbound-script-debugging=true +
-//     script-debugger-auto-attach=listen in server.properties, confirmed
-//     via a real TCP probe): BDS opens port 19144 automatically at level
-//     load ("[Scripting] Debugger auto-attach... is still listening" in
-//     its own console, port genuinely accepting connections) - no BDS
-//     console command needed at all, which matters because this project's
-//     own bdsTestHarness.js already established BDS has no reliable
-//     programmatic stdin channel. VS Code then CONNECTS OUT
-//     ("mode": "connect", via --mode=connect).
-function cmdDebug(modDir, flags) {
-    if (!flags.includes("--launch-vscode")) {
-        console.log("Usage: openrock debug --launch-vscode [--mode=connect|listen] <modDir>");
-        console.log('Writes .vscode/launch.json for Mojang\'s official "minecraft-js" debugger extension (port 19144).');
-        return;
-    }
-    const { manifest } = loadManifestFile(modDir);
-    if (manifest.packs.behavior === false) throw new Error(`"${manifest.name}" is a resource-pack-only mod (packs.behavior: false) - there are no scripts to debug`);
-    const modeFlag = flags.find(f => f.startsWith("--mode="));
-    const mode = modeFlag ? modeFlag.slice("--mode=".length) : "listen";
-    if (mode !== "connect" && mode !== "listen") throw new Error(`--mode must be "connect" or "listen", got "${mode}"`);
-
-    const vscodeDir = path.join(modDir, ".vscode");
-    fs.mkdirSync(vscodeDir, { recursive: true });
-    const launchJsonPath = path.join(vscodeDir, "launch.json");
-    // "0.3.0" is the real, current schema version Mojang's own README
-    // examples use as of this fetch - bumped from the earlier, stale "0.2.0".
-    const existing = fs.existsSync(launchJsonPath) ? JSON.parse(fs.readFileSync(launchJsonPath, "utf8")) : { version: "0.3.0", configurations: [] };
-    const scriptsSubdir = manifest.content?.scriptsDir ? path.relative(modDir, path.join(modDir, manifest.content.scriptsDir)).split(path.sep).join("/") : "scripts";
-    const config = {
-        type: "minecraft-js",
-        request: "attach",
-        mode,
-        port: 19144,
-        // targetModuleUuid: real, Mojang-documented optional field -
-        // "important to use if you are developing add-ons in Minecraft
-        // while there are multiple behavior packs with script active",
-        // which is exactly OpenRock's own multi-mod dev-mode scenario.
-        // OpenRock always knows this value already (this mod's own real
-        // scriptModuleUuid) - no reason to leave it unset.
-        targetModuleUuid: manifest.packs.behavior.scriptModuleUuid,
-        sourceMapRoot: `\${workspaceFolder}/${scriptsSubdir}/`,
-        generatedSourceRoot: `\${workspaceFolder}/build/${manifest.packs.behavior.folder}/scripts/`,
-    };
-    const idx = existing.configurations.findIndex(c => c.type === "minecraft-js" && c.name === `Debug ${manifest.name}`);
-    if (idx >= 0) existing.configurations[idx] = { name: `Debug ${manifest.name}`, ...config };
-    else existing.configurations.push({ name: `Debug ${manifest.name}`, ...config });
-    fs.writeFileSync(launchJsonPath, JSON.stringify(existing, null, 2) + "\n");
-    console.log(`[${stamp()}] Wrote ${launchJsonPath}`);
-
-    if (mode === "listen") {
-        console.log(`Install Mojang's "Minecraft Bedrock Debugger" VS Code extension, hit F5 ("Debug ${manifest.name}") to enter listen mode, load a world with this pack in Minecraft, then run the slash command: /script debugger connect`);
-    } else {
-        console.log("Real BDS setup (live-verified, no console access needed): in your BDS instance's server.properties, set allow-inbound-script-debugging=true and script-debugger-auto-attach=listen - BDS then opens port 19144 automatically at every level load.");
-        console.log(`Then, in VS Code, install Mojang's "Minecraft Bedrock Debugger" extension and hit F5 ("Debug ${manifest.name}") to connect.`);
-    }
-}
 
 async function main() {
     const args = process.argv.slice(2);
@@ -412,11 +68,11 @@ async function main() {
     const modDir = path.resolve(dirArg ?? ".");
     try {
         switch (cmd) {
-            case "build": await cmdBuild(modDir, flags); break;
-            case "check": await cmdCheck(modDir, flags); break;
-            case "export": cmdExport(modDir); break;
-            case "deploy": cmdDeploy(modDir); break;
-            case "dev": cmdDev(modDir); break;
+            case "build": await cmdBuild(modDir, flags, OPENROCK_ROOT); break;
+            case "check": await cmdCheck(modDir, flags, OPENROCK_ROOT); break;
+            case "export": cmdExport(modDir, OPENROCK_ROOT); break;
+            case "deploy": cmdDeploy(modDir, false, OPENROCK_ROOT); break;
+            case "dev": cmdDev(modDir, OPENROCK_ROOT); break;
             case "log": cmdLog(modDir, flags); break;
             case "debug": cmdDebug(modDir, flags); break;
             default:
