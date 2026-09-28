@@ -3,7 +3,7 @@
   "minecraft:client_entity": {
     "description": {
       "identifier": "{{ns}}:nav_anchor",
-      "materials": { "default": "entity_alphatest" },
+      "materials": { "default": "zombie" },
       "textures": { "default": "textures/entity/zombie/zombie" },
       "geometry": { "default": "geometry.zombie" },
       "render_controllers": ["controller.render.zombie"]
