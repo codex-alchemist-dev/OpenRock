@@ -1,0 +1,25 @@
+# Real packaging hygiene for `npm publish`/Winget readiness: everything
+# here is genuinely dev/test-only content, never read by an INSTALLED
+# openrock CLI's own runtime (buildMod()/entityDsl/manifestDsl/bdsTestHarness
+# etc. never reference test/ or mods/ at runtime) - excluding it keeps a
+# real published package lean instead of shipping OpenRock's own internal
+# test suite and demo mod to every end user.
+/test/
+/mods/
+
+# This project's own real tests, and each vendored/bundled dependency's
+# own dev-only files - never needed once installed.
+**/*.test.js
+**/*.test.cjs
+vendor/mclite/test/
+vendor/minui/lib/*.test.js
+vendor/minui/lib/test/
+vendor/minui/src/test/
+vendor/minui/docs/
+vendor/minui/package-lock.json
+vendor/minui/tsconfig.json
+libs/*/test/
+
+# Real, generated build artifacts - never meant to be committed OR shipped.
+.entity-dsl-dist/
+.manifest-dsl-dist/
