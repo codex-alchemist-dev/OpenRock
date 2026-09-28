@@ -14,37 +14,51 @@
 // preference in this ecosystem uses.
 //
 // See "OR-Track L", Part 1, item 11, in the project plan document.
+//
+// OR-Track N (2026-09-28): PARTIAL hoist, unlike this library's siblings -
+// translate()/registerLocaleTable()/resolveLiteral() are genuinely pure (no
+// capabilities dependency) and are real top-level module.exports, so a
+// mod's own in-game script can `import { translate } from "@openrock/i18n"`
+// directly for RawMessage building without any kernel wiring at all. The
+// player-override functions (setPlayerLanguageOverride, etc.) genuinely
+// need @openrock/capabilities injected via ctx at register() time and stay
+// kernel-only - they can't be hoisted without inventing a second, fake
+// capabilities dependency, which would be exactly the kind of dual-
+// implementation this whole track exists to avoid. `tables` is a real
+// module-level singleton (not per-register()-call) so the hoisted pure
+// functions and the kernel-only capabilities-backed functions below both
+// see the same registered locale tables.
 "use strict";
 
 const OVERRIDE_KIND = "i18n:override";
 const OVERRIDE_ID = "value";
 
-module.exports = function register(kernel, ctx) {
+const tables = new Map(); // langCode -> { key -> template string, "{0}"/"{1}"/... placeholders }
+
+/** @returns {{translate:string, with?:string[]}} a real Bedrock RawMessage - the client localizes this itself. */
+function translate(key, params = []) {
+    return params.length > 0 ? { translate: key, with: params.map(String) } : { translate: key };
+}
+
+/** Registers (or replaces) a literal-text table for one language code. */
+function registerLocaleTable(langCode, table) {
+    if (typeof langCode !== "string" || !langCode) throw new Error("@openrock/i18n: registerLocaleTable() requires a real langCode string");
+    if (!table || typeof table !== "object") throw new Error("@openrock/i18n: registerLocaleTable() requires a real table object");
+    tables.set(langCode, table);
+}
+
+/** Resolves `key` against a registered literal table, substituting `{0}`, `{1}`, ... - null if the language or key isn't registered. */
+function resolveLiteral(langCode, key, params = []) {
+    const table = tables.get(langCode);
+    if (!table) return null;
+    const template = table[key];
+    if (template === undefined) return null;
+    return params.reduce((s, p, i) => s.split(`{${i}}`).join(String(p)), template);
+}
+
+function register(kernel, ctx) {
     const capabilities = ctx.dependencies["@openrock/capabilities"];
     capabilities.registerCapability(OVERRIDE_KIND, { lang: "string" });
-
-    const tables = new Map(); // langCode -> { key -> template string, "{0}"/"{1}"/... placeholders }
-
-    /** @returns {{translate:string, with?:string[]}} a real Bedrock RawMessage - the client localizes this itself. */
-    function translate(key, params = []) {
-        return params.length > 0 ? { translate: key, with: params.map(String) } : { translate: key };
-    }
-
-    /** Registers (or replaces) a literal-text table for one language code. */
-    function registerLocaleTable(langCode, table) {
-        if (typeof langCode !== "string" || !langCode) throw new Error("@openrock/i18n: registerLocaleTable() requires a real langCode string");
-        if (!table || typeof table !== "object") throw new Error("@openrock/i18n: registerLocaleTable() requires a real table object");
-        tables.set(langCode, table);
-    }
-
-    /** Resolves `key` against a registered literal table, substituting `{0}`, `{1}`, ... - null if the language or key isn't registered. */
-    function resolveLiteral(langCode, key, params = []) {
-        const table = tables.get(langCode);
-        if (!table) return null;
-        const template = table[key];
-        if (template === undefined) return null;
-        return params.reduce((s, p, i) => s.split(`{${i}}`).join(String(p)), template);
-    }
 
     function setPlayerLanguageOverride(owner, world, lang) {
         return capabilities.writeCapability(owner, world, OVERRIDE_KIND, OVERRIDE_ID, () => ({ lang }));
@@ -82,4 +96,9 @@ module.exports = function register(kernel, ctx) {
             resolveText,
         },
     };
-};
+}
+
+module.exports = register;
+module.exports.translate = translate;
+module.exports.registerLocaleTable = registerLocaleTable;
+module.exports.resolveLiteral = resolveLiteral;
