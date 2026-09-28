@@ -103,4 +103,14 @@ system.afterEvents.scriptEventReceive.subscribe(event => {
     }
 });
 
-world.sendMessage(`[${NS}] pathfinding-demo loaded - try /scriptevent ${NS}:navtest_spawn`);
+// World::sendMessage (and most world-interacting calls) can't run during
+// "early execution" - the brief window while the script is first being
+// evaluated, before the world is actually ready. Deferring via system.run()
+// pushes this to the next real tick, after early execution ends. A real bug
+// caught via the content log the first time this deployed: calling
+// world.sendMessage() directly here crashed the WHOLE script on load
+// (uncaught at module scope), meaning the scriptevent subscription above
+// never even registered - nothing happened for any /scriptevent command.
+system.run(() => {
+    world.sendMessage(`[${NS}] pathfinding-demo loaded - try /scriptevent ${NS}:navtest_spawn`);
+});
