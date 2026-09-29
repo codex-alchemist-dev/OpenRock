@@ -74,7 +74,7 @@ async function main() {
             case "deploy": cmdDeploy(modDir, false, OPENROCK_ROOT); break;
             case "dev": cmdDev(modDir, OPENROCK_ROOT); break;
             case "log": cmdLog(modDir, flags); break;
-            case "debug": cmdDebug(modDir, flags); break;
+            case "debug": cmdDebug(modDir, flags, OPENROCK_ROOT); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);
                 process.exitCode = cmd ? 1 : 0;

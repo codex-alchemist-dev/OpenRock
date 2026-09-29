@@ -30,8 +30,9 @@ const fs = require("fs");
 const path = require("path");
 const { loadManifestFile } = require("../manifest.js");
 const { stamp } = require("./shared.js");
+const { findBdsInstance, findAutoInstalledBds, configureDebugProperties } = require("../bdsTestHarness.js");
 
-function cmdDebug(modDir, flags) {
+function cmdDebug(modDir, flags, openrockRoot) {
     if (!flags.includes("--launch-vscode")) {
         console.log("Usage: openrock debug --launch-vscode [--mode=connect|listen] <modDir>");
         console.log('Writes .vscode/launch.json for Mojang\'s official "minecraft-js" debugger extension (port 19144).');
@@ -74,8 +75,21 @@ function cmdDebug(modDir, flags) {
     if (mode === "listen") {
         console.log(`Install Mojang's "Minecraft Bedrock Debugger" VS Code extension, hit F5 ("Debug ${manifest.name}") to enter listen mode, load a world with this pack in Minecraft, then run the slash command: /script debugger connect`);
     } else {
-        console.log("Real BDS setup (live-verified, no console access needed): in your BDS instance's server.properties, set allow-inbound-script-debugging=true and script-debugger-auto-attach=listen - BDS then opens port 19144 automatically at every level load.");
-        console.log(`Then, in VS Code, install Mojang's "Minecraft Bedrock Debugger" extension and hit F5 ("Debug ${manifest.name}") to connect.`);
+        // Real, self-sufficient BDS setup - one openrock command does the
+        // WHOLE thing, no manual server.properties editing required. This
+        // is the real, live-verified mechanism (never a BDS console
+        // command - BDS has no reliable stdin channel): two real
+        // server.properties flags, set here, that make BDS's own native
+        // engine open port 19144 and start listening automatically at
+        // every level load from then on.
+        const bdsDir = findBdsInstance(undefined, openrockRoot) ?? findAutoInstalledBds();
+        if (bdsDir) {
+            configureDebugProperties(bdsDir);
+            console.log(`[${stamp()}] Configured real BDS debug auto-attach at ${bdsDir} (allow-inbound-script-debugging=true, script-debugger-auto-attach=listen) - no manual server.properties editing needed.`);
+        } else {
+            console.log("No real BDS instance found yet to configure - run \"openrock build\" or \"openrock check\" once first (it will auto-install one), then re-run this debug command to configure it.");
+        }
+        console.log(`In VS Code, install Mojang's "Minecraft Bedrock Debugger" extension and hit F5 ("Debug ${manifest.name}") to connect - then run "openrock build" (or "openrock dev") to boot the real server.`);
     }
 }
 

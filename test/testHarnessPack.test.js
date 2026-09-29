@@ -8,7 +8,7 @@
 const assert = require("assert");
 const {
     enumerateTestTargets, buildTestHarnessPack, generateHarnessManifest,
-    MARKER_ENTITY_OK, MARKER_ENTITY_FAIL, MARKER_BLOCK_OK, MARKER_DONE,
+    MARKER_ENTITY_OK, MARKER_ENTITY_FAIL, MARKER_BLOCK_OK, MARKER_ITEM_OK, MARKER_DONE,
 } = require("../src/testHarnessPack.js");
 
 let passed = 0;
@@ -32,31 +32,43 @@ test("enumerateTestTargets: extracts every real entity identifier from entities/
         ["entities/nav_anchor.json", jsonBuf({ "minecraft:entity": { description: { identifier: "prd:nav_anchor" } } })],
         ["scripts/main.js", Buffer.from("// not an entity")],
     ]);
-    const { entityIds, blockIds } = enumerateTestTargets(bp);
+    const { entityIds, blockIds, itemIds } = enumerateTestTargets(bp);
     assert.deepStrictEqual(entityIds.sort(), ["prd:nav_anchor", "prd:nav_test"]);
     assert.deepStrictEqual(blockIds, []);
+    assert.deepStrictEqual(itemIds, []);
 });
 
 test("enumerateTestTargets: extracts every real block identifier from blocks/*.json", () => {
     const bp = new Map([
         ["blocks/custom_ore.json", jsonBuf({ "minecraft:block": { description: { identifier: "prd:custom_ore" } } })],
     ]);
-    const { entityIds, blockIds } = enumerateTestTargets(bp);
+    const { entityIds, blockIds, itemIds } = enumerateTestTargets(bp);
     assert.deepStrictEqual(entityIds, []);
     assert.deepStrictEqual(blockIds, ["prd:custom_ore"]);
+    assert.deepStrictEqual(itemIds, []);
+});
+
+test("enumerateTestTargets: extracts every real item identifier from items/*.json", () => {
+    const bp = new Map([
+        ["items/custom_gem.json", jsonBuf({ "minecraft:item": { description: { identifier: "prd:custom_gem" } } })],
+    ]);
+    const { entityIds, blockIds, itemIds } = enumerateTestTargets(bp);
+    assert.deepStrictEqual(entityIds, []);
+    assert.deepStrictEqual(blockIds, []);
+    assert.deepStrictEqual(itemIds, ["prd:custom_gem"]);
 });
 
 test("enumerateTestTargets: a malformed/non-conforming JSON file is skipped, not thrown on", () => {
     const bp = new Map([["entities/broken.json", Buffer.from("not real json")]]);
-    assert.deepStrictEqual(enumerateTestTargets(bp), { entityIds: [], blockIds: [] });
+    assert.deepStrictEqual(enumerateTestTargets(bp), { entityIds: [], blockIds: [], itemIds: [] });
 });
 
 test("enumerateTestTargets: an empty bp Map produces empty target lists, not an error", () => {
-    assert.deepStrictEqual(enumerateTestTargets(new Map()), { entityIds: [], blockIds: [] });
+    assert.deepStrictEqual(enumerateTestTargets(new Map()), { entityIds: [], blockIds: [], itemIds: [] });
 });
 
 test("buildTestHarnessPack: produces a real manifest.json and scripts/main.js referencing every real target", () => {
-    const { bp, folder, uuid } = buildTestHarnessPack({ entityIds: ["prd:nav_test"], blockIds: ["prd:custom_ore"] });
+    const { bp, folder, uuid } = buildTestHarnessPack({ entityIds: ["prd:nav_test"], blockIds: ["prd:custom_ore"], itemIds: ["prd:custom_gem"] });
     assert.ok(bp.has("manifest.json"));
     assert.ok(bp.has("scripts/main.js"));
     assert.strictEqual(folder, "OpenRock Test Harness");
@@ -65,12 +77,16 @@ test("buildTestHarnessPack: produces a real manifest.json and scripts/main.js re
     const script = bp.get("scripts/main.js").toString("utf8");
     assert.match(script, /prd:nav_test/);
     assert.match(script, /prd:custom_ore/);
+    assert.match(script, /prd:custom_gem/);
     assert.match(script, new RegExp(MARKER_ENTITY_OK.replace(/[[\]]/g, "\\$&")));
+    assert.match(script, new RegExp(MARKER_ITEM_OK.replace(/[[\]]/g, "\\$&")));
     assert.match(script, new RegExp(MARKER_DONE.replace(/[[\]]/g, "\\$&")));
+    assert.match(script, /ItemStack/);
+    assert.match(script, /spawnItem/);
 });
 
 test("buildTestHarnessPack: a real, syntactically valid script (parses as real JS)", () => {
-    const { bp } = buildTestHarnessPack({ entityIds: ["a:b", "c:d"], blockIds: ["e:f"] });
+    const { bp } = buildTestHarnessPack({ entityIds: ["a:b", "c:d"], blockIds: ["e:f"], itemIds: ["g:h"] });
     const script = bp.get("scripts/main.js").toString("utf8");
     // A real, syntax-only check (this is an ES module using import/top-level
     // await-free code) - new Function() can't parse `import`, so strip it

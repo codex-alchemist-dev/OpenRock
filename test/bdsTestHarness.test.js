@@ -69,6 +69,24 @@ test("analyzeOutput: block OK/FAIL lines are classified separately from entity l
     assert.strictEqual(result.smokeResults[0].ok, true);
 });
 
+test("analyzeOutput: a real item spawn is classified as its own kind, and an item FAILURE is fatal", () => {
+    const okOutput = "[INFO] Pack Stack - [00] pack.name\n[OR-SMOKE][ITEM][OK] prd:custom_gem";
+    const okResult = analyzeOutput(okOutput);
+    assert.strictEqual(okResult.smokeResults[0].kind, "item");
+    assert.strictEqual(okResult.smokeResults[0].ok, true);
+    assert.strictEqual(okResult.ok, true);
+
+    const failOutput = [
+        "[INFO] Pack Stack - [00] pack.name",
+        "[ERROR] [OR-SMOKE][ITEM][FAIL] prd:broken_gem :: Error: item type not found",
+        "[WARN] [OR-SMOKE][DONE] entities=0 blocks=0 items=1 ok=0 fail=1",
+        "[INFO] Server started.",
+    ].join("\n");
+    const failResult = analyzeOutput(failOutput);
+    assert.strictEqual(failResult.ok, false, "a real item spawn failure must fail the whole smoke test");
+    assert.ok(failResult.errors.some(e => e.includes("prd:broken_gem")));
+});
+
 test("analyzeOutput: no real smoke markers at all (e.g. a mod with zero entities/blocks, or the harness pack never ran) reports smokeDone=false, empty results", () => {
     const output = "[INFO] Pack Stack - [00] pack.name\n[INFO] Server started.";
     const result = analyzeOutput(output);

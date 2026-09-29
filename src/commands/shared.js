@@ -55,14 +55,16 @@ async function maybeRunSmokeTest(r, flags, quiet = false) {
         throw new Error(`BDS smoke test FAILED for "${r.manifest.name}" (real server boot at ${result.bdsDir}):\n${detail}`);
     }
     if (!quiet) {
-        // OR-Track Q3: report the real per-entity/per-block spawn/place
-        // results, not just "it loaded" - this is the actual "all entities
-        // and blocks in the mod's definitions will be summoned" guarantee.
+        // OR-Track Q3: report the real per-entity/per-block/per-item
+        // spawn/place/test results, not just "it loaded" - this is the
+        // actual "all entities and blocks (and items) in the mod's
+        // definitions will be summoned/tested" guarantee.
         const smoke = result.smokeResults ?? [];
         const entityCount = smoke.filter(s => s.kind === "entity").length;
         const blockCount = smoke.filter(s => s.kind === "block").length;
+        const itemCount = smoke.filter(s => s.kind === "item").length;
         const smokeNote = result.smokeDone
-            ? ` ${entityCount} entit${entityCount === 1 ? "y" : "ies"} and ${blockCount} block${blockCount === 1 ? "" : "s"} genuinely spawned/placed and confirmed clean.`
+            ? ` ${entityCount} entit${entityCount === 1 ? "y" : "ies"}, ${blockCount} block${blockCount === 1 ? "" : "s"}, and ${itemCount} item${itemCount === 1 ? "" : "s"} genuinely spawned/placed/tested and confirmed clean. Server left debug-attach-ready (see "openrock debug --launch-vscode --mode=connect").`
             : "";
         console.log(`[${stamp()}] BDS smoke test passed - real server booted cleanly with "${r.manifest.name}" loaded (${result.bdsDir}).${smokeNote}`);
     }
