@@ -1,0 +1,24 @@
+{
+  "openrockVersion": 1,
+  "kind": "mod",
+  "name": "datagen-violation-mod",
+  "version": "1.0.0",
+  "namespace": "dgv",
+  "dependsOn": {
+    "@openrock/datagen": { "type": "library" }
+  },
+  "packs": {
+    "behavior": {
+      "folder": "Datagen Violation B",
+      "uuid": "cccccccc-1111-4000-8000-111111111111",
+      "dataModuleUuid": "cccccccc-2222-4000-8000-111111111111",
+      "scriptModuleUuid": "cccccccc-3333-4000-8000-111111111111"
+    },
+    "resource": {
+      "folder": "Datagen Violation R",
+      "uuid": "cccccccc-4444-4000-8000-111111111111",
+      "moduleUuid": "cccccccc-5555-4000-8000-111111111111"
+    }
+  },
+  "content": { "datagenEntry": "datagen.js" }
+}

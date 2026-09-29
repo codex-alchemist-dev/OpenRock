@@ -298,17 +298,23 @@ function putDirectoryDslEntry(map, outRel, value) {
 // - no Crystal dialect covers that yet) is unaffected; this only blocks
 // the exact real document shapes OpenRock's own DSLs now fully own.
 const NATIVE_ONLY_PATHS = [
-    { pattern: /^entities\//, dialect: "Crystal Manifest-Entity", field: "content.entityDsl" },
-    { pattern: /^entity\//, dialect: "Crystal Manifest-Entity", field: "content.entityDsl" },
-    { pattern: /^blocks\//, dialect: "Crystal Manifest-Block", field: "content.blockDsl" },
-    { pattern: /^items\//, dialect: "Crystal Manifest-Item", field: "content.itemDsl" },
+    { pattern: /^entities\//, kind: "entity", dialect: "Crystal Manifest-Entity", field: "content.entityDsl" },
+    { pattern: /^entity\//, kind: "entity", dialect: "Crystal Manifest-Entity", field: "content.entityDsl" },
+    { pattern: /^blocks\//, kind: "block", dialect: "Crystal Manifest-Block", field: "content.blockDsl" },
+    { pattern: /^items\//, kind: "item", dialect: "Crystal Manifest-Item", field: "content.itemDsl" },
+    // manifest.json is ALWAYS regenerated last by renderManifestJson() and
+    // would otherwise just silently overwrite a hand-rolled one here with
+    // zero warning - a real, confusing footgun a paranoid re-audit caught
+    // (the file would sit there looking "wired up" while never actually
+    // taking effect). Loud and explicit beats silent and confusing.
+    { pattern: /^manifest\.json$/, kind: "manifest", dialect: "Crystal Manifest", field: "content.manifestDsl" },
 ];
 
 function assertNotNativeOnlyPath(manifestName, outRel) {
     const hit = NATIVE_ONLY_PATHS.find(({ pattern }) => pattern.test(outRel));
     if (hit) {
         throw new Error(
-            `"${manifestName}": a real, hand-rolled native Bedrock file at "${outRel}" was found under a plain overlay directory (bpOverlayDir/rpOverlayDir) - OpenRock physically cannot compile hand-authored ${hit.dialect.replace("Crystal Manifest-", "").toLowerCase()} documents. ` +
+            `"${manifestName}": a real, hand-rolled native Bedrock file at "${outRel}" was found under a plain overlay directory (bpOverlayDir/rpOverlayDir) - OpenRock physically cannot compile hand-authored ${hit.kind} documents. ` +
             `Author this through ${hit.dialect} instead (${hit.field}).`
         );
     }
@@ -362,7 +368,20 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi)
         for (const [side, map] of [["bp", bp], ["rp", rp]]) {
             if (!result[side]) continue;
             if (!map) throw new Error(`"${manifest.name}": content.datagenEntry produced "${side}" output, but this package has no ${side === "bp" ? "behavior" : "resource"} pack`);
-            for (const [outRel, obj] of Object.entries(result[side])) putJson(map, fill(outRel, vars), obj);
+            for (const [outRel, obj] of Object.entries(result[side])) {
+                const filledRel = fill(outRel, vars);
+                // Real, paranoid catch: a datagenEntry script is arbitrary
+                // JS - it can return ANY path, including a real, hand-rolled
+                // native entities/blocks/items document that never went
+                // near a plain overlay directory at all. The enforcement
+                // above only guarded the overlay-copy loop; without this,
+                // datagenEntry was a real, live bypass of the whole "OpenRock
+                // physically can't compile hand-rolled native documents"
+                // rule - caught by a deliberately paranoid re-audit, not
+                // assumed safe just because it wasn't the first place checked.
+                assertNotNativeOnlyPath(manifest.name, filledRel);
+                putJson(map, filledRel, obj);
+            }
         }
     }
 

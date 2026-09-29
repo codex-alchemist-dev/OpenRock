@@ -9,7 +9,9 @@
 
 const assert = require("assert");
 const path = require("path");
-const { buildMod } = require("../src/buildPipeline.js");
+const { buildMod, resolveBundledLibraryDirs } = require("../src/buildPipeline.js");
+
+const LIBRARY_DIRS = resolveBundledLibraryDirs(path.join(__dirname, ".."));
 
 let passed = 0;
 function test(name, fn) {
@@ -72,6 +74,32 @@ test("buildMod: the enforcement is real Crystal-dialect-specific - a hand-rolled
     }));
 
     assert.throws(() => buildMod(workDir), /Crystal Manifest-Block/);
+    fs.rmSync(workDir, { recursive: true, force: true });
+});
+
+test("buildMod: a REAL bypass caught by a paranoid re-audit - content.datagenEntry (arbitrary JS) returning a hand-rolled native entities/*.json is ALSO caught, not just the plain overlay-copy path", () => {
+    assert.throws(
+        () => buildMod(path.join(FIXTURES, "enforcement", "datagen-violation-mod"), { libraryDirs: LIBRARY_DIRS }),
+        /Crystal Manifest-Entity/,
+        "content.datagenEntry is arbitrary JS - it can return any path at all, including one that never touched a physical overlay directory, so it needs its OWN enforcement check, not just the overlay loop's"
+    );
+});
+
+test("buildMod: a hand-rolled manifest.json under bpOverlayDir is ALSO caught - previously it silently overwrote nothing (renderManifestJson always runs last), a real confusing footgun a paranoid re-audit caught", () => {
+    const fs = require("fs");
+    const workDir = fs.mkdtempSync(path.join(FIXTURES, "enforcement", "native-only-violation-manifest-"));
+    fs.writeFileSync(path.join(workDir, "openrock.mod.json"), JSON.stringify({
+        openrockVersion: 1, kind: "mod", name: "native-only-manifest-violation", version: "0.1.0", namespace: "nomv",
+        packs: {
+            behavior: { folder: "B", uuid: "dddddddd-0000-4000-8000-000000000001", dataModuleUuid: "dddddddd-0000-4000-8000-000000000002", scriptModuleUuid: "dddddddd-0000-4000-8000-000000000003" },
+            resource: { folder: "R", uuid: "dddddddd-0000-4000-8000-000000000004", moduleUuid: "dddddddd-0000-4000-8000-000000000005" },
+        },
+        content: { bpOverlayDir: "bp" },
+    }));
+    fs.mkdirSync(path.join(workDir, "bp"), { recursive: true });
+    fs.writeFileSync(path.join(workDir, "bp", "manifest.json"), JSON.stringify({ format_version: 2, header: {}, modules: [] }));
+
+    assert.throws(() => buildMod(workDir), /Crystal Manifest\b/);
     fs.rmSync(workDir, { recursive: true, force: true });
 });
 
