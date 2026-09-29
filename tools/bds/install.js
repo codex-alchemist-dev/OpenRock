@@ -17,6 +17,17 @@
 // + sha256 hashes (both fetched live and inspected before this file was
 // written). Real, scriptable download URLs:
 // https://www.minecraft.net/bedrockdedicatedserver/bin-win|bin-linux/bedrock-server-<version>.zip
+//
+// Windows path (installBds() -> real download -> sha256 verify -> real
+// extractZip() -> real boot) has been fully, live end-to-end verified: a
+// genuine downloaded BDS instance, in a real, paranoid re-audit, actually
+// booted ("Server started.") - this was NOT true until that audit; before
+// it, only the small metadata fetches and a synthetic small-archive
+// extraction had ever been exercised for real. The Linux path
+// (bin-linux, platformKey()==="linux") shares the exact same code, but has
+// NEVER been run for real - no Linux environment has been available in any
+// session that built this. Flagged here explicitly rather than silently
+// assumed to work just because the Windows path does.
 "use strict";
 
 const fs = require("fs");

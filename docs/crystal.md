@@ -73,15 +73,25 @@ A standing architectural rule, enforced in code, not just documented:
 OpenRock is a genuinely different format from native Minecraft, so it must
 be physically impossible to smuggle a hand-authored, native
 `entities/*.json`/`entity/*.json`/`blocks/*.json`/`items/*.json` file
-through a mod's plain `content.bpOverlayDir`/`rpOverlayDir` (the escape
-hatch that exists for real content NO Crystal dialect owns yet - textures,
-sounds, loot tables, recipes, and so on). `src/buildPipeline.js`'s
-`assertNotNativeOnlyPath()` runs on every real overlay file, in both the
-full build and the incremental `dev`-mode path, and fails the whole build
+through a mod's plain `content.bpOverlayDir`/`rpOverlayDir`, OR through
+`content.datagenEntry` (real, arbitrary Node JS is a second real path
+that writes documents directly, not just static overlay files) - the
+overlay/datagen escape hatch exists for real content NO Crystal dialect
+owns yet (textures, sounds, loot tables, recipes, and so on), never for
+the exact document shapes a Crystal dialect fully owns.
+`src/buildPipeline.js`'s `assertNotNativeOnlyPath()` runs on every real
+overlay file AND every real datagenEntry output path, in both the full
+build and the incremental `dev`-mode path, and fails the whole build
 loudly - naming the real Crystal dialect that owns the document - the
-moment a file lands at one of those paths. See
+moment a file lands at one of those paths (this also covers a
+hand-rolled `manifest.json`, which previously wasn't blocked - it just
+silently lost to the real generated one, a confusing footgun rather than
+a real bypass, but still worth a loud error). See
 [`test/nativeOnlyEnforcement.test.js`](../test/nativeOnlyEnforcement.test.js)
-for the real, live proof. `mods/pathfinding-demo` itself used to hand-roll
+for the real, live proof - including two real bypasses (the datagenEntry
+path, and the silent-manifest.json-footgun) a deliberately paranoid
+re-audit found and closed AFTER this rule's first real implementation,
+not on the first pass. `mods/pathfinding-demo` itself used to hand-roll
 its own `rp/entities/*.json` client-visual documents before this rule
 existed - migrating it off that (onto Crystal Manifest-Entity's own real
 visual props, below) is what actually closed the loophole, and incidentally
