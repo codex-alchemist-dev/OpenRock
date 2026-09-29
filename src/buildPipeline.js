@@ -70,6 +70,7 @@ const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = r
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
 const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
 const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
+const { formatEsbuildFailure } = require("./buildDiagnostics.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -586,20 +587,33 @@ function resolveScriptEntry(manifest, dir) {
 // scripts/main.js.map, referenced from main.js via the standard
 // `//# sourceMappingURL=` comment esbuild appends automatically.
 function bundleScripts(rootManifest, entryFile, resolveMap) {
-    const result = esbuild.buildSync({
-        entryPoints: [entryFile],
-        bundle: true,
-        format: "esm",
-        alias: Object.fromEntries(resolveMap),
-        write: false,
-        external: BEDROCK_BUILTIN_MODULES,
-        sourcemap: "linked",
-        outfile: "main.js",
-        logLevel: "silent",
-    });
+    // Real, confirmed-by-testing esbuild behavior: buildSync() doesn't
+    // return normally with a populated `result.errors` on failure - it
+    // THROWS its own BuildFailure exception (whose `.errors` array carries
+    // the exact same real, structured diagnostics) regardless of
+    // `logLevel`. `logLevel` only controls esbuild's own console printing,
+    // never whether it throws - a real gap caught live (a broken import
+    // produced esbuild's own default-formatted exception text instead of
+    // this project's real, intricate report) and fixed here, not assumed
+    // safe just because `if (result.errors.length)` looked plausible.
+    let result;
+    try {
+        result = esbuild.buildSync({
+            entryPoints: [entryFile],
+            bundle: true,
+            format: "esm",
+            alias: Object.fromEntries(resolveMap),
+            write: false,
+            external: BEDROCK_BUILTIN_MODULES,
+            sourcemap: "linked",
+            outfile: "main.js",
+            logLevel: "silent",
+        });
+    } catch (err) {
+        throw new Error(formatEsbuildFailure(err.errors ?? [{ text: err.message, location: null }], rootManifest.name));
+    }
     if (result.errors.length) {
-        const detail = result.errors.map(e => `${e.text}${e.location ? ` (${e.location.file}:${e.location.line})` : ""}`).join("\n");
-        throw new Error(`buildMod(): esbuild failed bundling "${rootManifest.name}"'s scripts:\n${detail}`);
+        throw new Error(formatEsbuildFailure(result.errors, rootManifest.name));
     }
     const js = result.outputFiles.find(f => f.path.endsWith(".js"));
     const map = result.outputFiles.find(f => f.path.endsWith(".js.map"));

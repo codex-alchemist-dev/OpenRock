@@ -14,6 +14,7 @@ const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildBlock } = require("./blockBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
+const { formatTscFailure } = require("../buildDiagnostics.js");
 
 const TEMPLATE_TSCONFIG = path.join(__dirname, "tsconfig.template.json");
 const RUNTIME_FILES = [path.join(__dirname, "jsx-runtime.js"), path.join(__dirname, "components.js"), path.join(__dirname, "blockBuilder.js")];
@@ -61,6 +62,8 @@ function compileBlockDsl(blockDslDir, { outDir } = {}) {
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
             compileWithRealTsc(tsconfigPath, { cwd: blockDslDir });
+        } catch (err) {
+            throw new Error(formatTscFailure(err, { cwd: blockDslDir, dialect: "Crystal Manifest-Block" }));
         } finally {
             fs.rmSync(tsconfigPath, { force: true });
         }

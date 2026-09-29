@@ -8,6 +8,7 @@ const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildItem } = require("./itemBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
+const { formatTscFailure } = require("../buildDiagnostics.js");
 
 const TEMPLATE_TSCONFIG = path.join(__dirname, "tsconfig.template.json");
 const RUNTIME_FILES = [path.join(__dirname, "jsx-runtime.js"), path.join(__dirname, "components.js"), path.join(__dirname, "itemBuilder.js")];
@@ -54,6 +55,8 @@ function compileItemDsl(itemDslDir, { outDir } = {}) {
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
             compileWithRealTsc(tsconfigPath, { cwd: itemDslDir });
+        } catch (err) {
+            throw new Error(formatTscFailure(err, { cwd: itemDslDir, dialect: "Crystal Manifest-Item" }));
         } finally {
             fs.rmSync(tsconfigPath, { force: true });
         }

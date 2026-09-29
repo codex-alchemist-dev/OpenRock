@@ -233,4 +233,40 @@ test("buildMod: a bare `import { x } from \"some-library\"` in a mod's own scrip
     }
 });
 
+test("buildMod: a real unresolvable script import produces the intricate build-debugger report (file/line/column/code-frame/fix), not esbuild's own raw default text", () => {
+    // Real, confirmed-by-testing esbuild behavior: buildSync() THROWS its
+    // own BuildFailure exception on a real bundling error - it never
+    // returns normally with a populated `result.errors` array, regardless
+    // of `logLevel`. This is a real regression test for that exact gap
+    // (caught live via an actual `openrock build` run, not assumed): before
+    // the fix, this exact scenario surfaced esbuild's own default
+    // "Build failed with N error(s):\n..." text instead of this project's
+    // real, intricate diagnostic report.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openrock-esbuild-diag-test-"));
+    try {
+        fs.writeFileSync(path.join(tmp, "openrock.mod.json"), JSON.stringify({
+            openrockVersion: 1, kind: "mod", name: "broken-import-mod", version: "1.0.0", namespace: "bim",
+            packs: {
+                behavior: { folder: "B", uuid: "11111111-1111-1111-1111-111111111111", dataModuleUuid: "22222222-2222-2222-2222-222222222222", scriptModuleUuid: "33333333-3333-3333-3333-333333333333" },
+                resource: { folder: "R", uuid: "44444444-4444-4444-4444-444444444444", moduleUuid: "55555555-5555-5555-5555-555555555555" },
+            },
+            content: { scriptsDir: "scripts" },
+        }));
+        fs.mkdirSync(path.join(tmp, "scripts"));
+        fs.writeFileSync(path.join(tmp, "scripts", "main.js"), 'import { x } from "this-module-does-not-exist";\n');
+        assert.throws(
+            () => buildMod(tmp),
+            err => {
+                assert.match(err.message, /esbuild failed bundling "broken-import-mod"'s scripts - 1 real error found/);
+                assert.match(err.message, /scripts[\\/]main\.js:1:\d+/);
+                assert.match(err.message, /Could not resolve "this-module-does-not-exist"/);
+                assert.match(err.message, /Fix: Check the import\/reference/);
+                return true;
+            }
+        );
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
 Promise.all(asyncTests).then(() => console.log(`\n${passed} passed`));

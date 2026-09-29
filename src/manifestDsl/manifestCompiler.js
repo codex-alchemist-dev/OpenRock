@@ -12,6 +12,7 @@ const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildManifestSet } = require("./manifestBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
+const { formatTscFailure } = require("../buildDiagnostics.js");
 
 const TEMPLATE_TSCONFIG = path.join(__dirname, "tsconfig.template.json");
 // OR-Track Q6: this DSL's own shared runtime files - see entityCompiler.js's
@@ -72,6 +73,8 @@ function compileManifestDsl(manifestDslFile, { outDir } = {}) {
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
             compileWithRealTsc(tsconfigPath, { cwd: dir });
+        } catch (err) {
+            throw new Error(formatTscFailure(err, { cwd: dir, dialect: "Crystal Manifest" }));
         } finally {
             fs.rmSync(tsconfigPath, { force: true });
         }

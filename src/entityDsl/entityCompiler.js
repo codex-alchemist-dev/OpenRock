@@ -14,6 +14,7 @@ const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..
 const { buildEntity } = require("./entityBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
 const { walk } = require("../fsTree.js");
+const { formatTscFailure } = require("../buildDiagnostics.js");
 
 // Real per-entity asset co-location (OR-Track M6, per the user's own
 // explicit standing architectural rule: OpenRock's own mod format is ONE
@@ -132,6 +133,8 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
             compileWithRealTsc(tsconfigPath, { cwd: entityDslDir });
+        } catch (err) {
+            throw new Error(formatTscFailure(err, { cwd: entityDslDir, dialect: "Crystal Manifest-Entity" }));
         } finally {
             fs.rmSync(tsconfigPath, { force: true }); // a real, generated build artifact - never left behind as a stray file
         }
