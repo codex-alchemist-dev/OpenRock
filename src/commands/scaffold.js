@@ -1,184 +1,54 @@
-// `openrock scaffold <name> [path]`
-// Generate a new library with boilerplate.
+// `openrock scaffold <name> [--deps=a,b] [--hooks=x,y] [--api=fn1,fn2] [--desc=text] [--runtime] [--out=dir]`
+// Generates a first-party library skeleton in the libs/i18n layout: manifest,
+// package.json, README, LICENSE, src/register.js (TODO-throwing API stubs),
+// and a smoke test, then appends that test to the root package.json chain.
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
 
-const MPL2_LICENSE = `Mozilla Public License Version 2.0
-==================================
+const flagValue = (flags, name) => flags.find(f => f.startsWith(`--${name}=`))?.slice(name.length + 3);
+const list = v => (v ? v.split(",").map(s => s.trim()).filter(Boolean) : []);
+const camel = s => s.replace(/-(\w)/g, (_, c) => c.toUpperCase());
 
-1. Definitions
---------------
-
-1.1. "Contributor"
-    means each individual or legal entity that creates, contributes to
-    the creation of, or owns Covered Software.
-
-1.2. "Contributor Version"
-    means the contribution of a Contributor.
-
-1.3. "Covered Software"
-    means Source Code and Executable Form, with the exception that it
-    does not include Source Code or Executable Form materials that are
-    governed solely by the terms of this Agreement and not also governed
-    by the terms of any other agreement.
-
-2. License Grants
------------------
-
-2.1. The Initial Developer Grant.
-    Subject to the restrictions in Section 2.2, Mozilla and each Contributor
-    hereby grants You a world-wide, royalty-free, non-exclusive license to
-    the Source Code version of the Covered Software.
-
-3. Distribution Obligations
-----------------------------
-
-3.1. Application of License.
-    The Source Code and Executable Form of Covered Software, and any
-    Derivatives thereof, must be made available under the terms of this
-    License.
-
-3.2. Distribution of Source Form.
-    If You distribute Covered Software in Source Code form, then:
-    (a) it must be under the terms of this License; and
-    (b) You must make source available.
-
-3.3. Distribution of Executable Form.
-    If You distribute Covered Software in Executable Form then:
-    (a) it must be under the terms of this License; and
-    (b) You must make source available.
-
-6. Trademarks.
-    This License does not grant permission to use the trade names, trademarks,
-    service marks, or product names of the Licensor.
-
-7. Limitation of Liability.
-    Under no circumstances shall any Licensor be liable to licensee for
-    any indirect, incidental, special, consequential or exemplary damages.
-
-END OF MOZILLA PUBLIC LICENSE 2.0`;
-
-function cmdScaffold(libName, targetPath) {
-    if (!libName) throw new Error("Usage: openrock scaffold <name> [path]");
-    if (!/^[a-z][a-z0-9-]*$/.test(libName)) {
-        throw new Error("Name must start with letter, contain only lowercase letters, numbers, hyphens");
-    }
-
-    const dir = targetPath ? path.resolve(targetPath) : path.resolve(process.cwd(), libName);
+function cmdScaffold(name, flags = [], root) {
+    if (!name || !/^[a-z][a-z0-9-]*$/.test(name)) throw new Error("Usage: openrock scaffold <name> (lowercase letters, digits, hyphens)");
+    const pkgName = `@openrock/${name}`;
+    const libsDir = path.join(root, "libs");
+    const dir = path.resolve(flagValue(flags, "out") ?? path.join(libsDir, name));
     if (fs.existsSync(dir)) throw new Error(`Directory already exists: ${dir}`);
-    fs.mkdirSync(dir, { recursive: true });
 
-    // Create openrock.library.json
-    const libManifest = {
-        name: `@openrock/${libName}`,
-        provides: {
-            api: "lib",
-            hookNamespaces: []
-        },
-        dependencies: []
+    const deps = list(flagValue(flags, "deps"));
+    const hooks = list(flagValue(flags, "hooks"));
+    const api = list(flagValue(flags, "api"));
+    const desc = flagValue(flags, "desc") ?? `OpenRock library: ${name}.`;
+    const runtime = flags.includes("--runtime");
+
+    const manifest = {
+        openrockVersion: 1, kind: "library", name: pkgName, version: "0.1.0", entry: "src/register.js",
+        ...(deps.length ? { dependsOn: Object.fromEntries(deps.map(d => [d.startsWith("@") ? d : `@openrock/${d}`, { type: "library" }])) } : {}),
+        provides: { ...(runtime ? { api: "src/register.js" } : {}), hookNamespaces: hooks.length ? hooks : [name] },
+        ...(runtime ? { scripts: { runtime: true } } : {}),
     };
-    fs.writeFileSync(path.join(dir, "openrock.library.json"), JSON.stringify(libManifest, null, 2) + "\n");
+    const w = (rel, text) => { const f = path.join(dir, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); };
 
-    // Create package.json
-    const pkg = {
-        name: `@openrock/${libName}`,
-        version: "1.0.0",
-        description: `OpenRock library: ${libName}`,
-        main: "src/register.js",
-        scripts: {
-            test: `node test/${libName}.test.js`
-        },
-        license: "MPL-2.0",
-        keywords: ["openrock", "bedrock-edition"]
-    };
-    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+    w("openrock.library.json", JSON.stringify(manifest, null, 2) + "\n");
+    w("package.json", JSON.stringify({ name: pkgName, version: "0.1.0", description: desc, license: "MPL-2.0", private: true, main: "src/register.js" }, null, 2) + "\n");
+    w("README.md", `# ${pkgName}\n\n${desc}\n\nSTATUS: stub. Every API function currently throws "not implemented"; the shape below is the contract to implement.\n\n## API\n\n${api.map(a => `- \`${a}\``).join("\n") || "- (none declared yet)"}\n`);
+    const license = path.join(libsDir, "i18n", "LICENSE");
+    w("LICENSE", fs.existsSync(license) ? fs.readFileSync(license, "utf8") : "MPL-2.0 - see https://mozilla.org/MPL/2.0/\n");
 
-    // Create README.md
-    const readme = `# @openrock/${libName}
+    const fns = api.map(a => `    ${camel(a)}() { throw new Error("${pkgName}: ${camel(a)} is not implemented"); },`).join("\n");
+    w("src/register.js", `// ${pkgName} - ${desc}\n// Stub: replace each TODO-throwing function with a real implementation.\n// Pure functions stay real top-level exports; register() exposes the same API through the kernel.\n"use strict";\n\nconst api = {\n${fns}\n};\n\nfunction register(kernel, ctx) {\n    return { api };\n}\n\nmodule.exports = Object.assign(register, api);\n`);
+    w(`test/${name}.test.js`, `#!/usr/bin/env node\n"use strict";\n\nconst assert = require("assert");\nconst path = require("path");\nconst { loadManifestFile } = require(path.join(__dirname, "..", "..", "..", "src", "manifest.js"));\nconst lib = require("../src/register.js");\n\nlet passed = 0;\nfunction test(name, fn) {\n    try { fn(); passed++; console.log(\`ok - \${name}\`); }\n    catch (e) { console.error(\`FAIL - \${name}\`); console.error(e); process.exitCode = 1; }\n}\n\ntest("${name}: manifest validates", () => {\n    const { manifest } = loadManifestFile(path.join(__dirname, ".."));\n    assert.strictEqual(manifest.name, "${pkgName}");\n});\n\ntest("${name}: register() exposes the declared API; every stub fails loudly", () => {\n    const { api } = lib();\n    for (const [k, fn] of Object.entries(api)) {\n        assert.strictEqual(typeof fn, "function", k);\n        assert.throws(() => fn(), /not implemented/, k);\n    }\n});\n\nconsole.log(\`\n\${passed} passed\`);\n`);
 
-OpenRock library: ${libName}.
-
-## Installation
-
-Add to your mod's dependencies in openrock.mod.json.
-
-## API
-
-See src/register.js for available functions.
-
-## License
-
-Mozilla Public License 2.0
-`;
-    fs.writeFileSync(path.join(dir, "README.md"), readme);
-
-    // Create LICENSE
-    fs.writeFileSync(path.join(dir, "LICENSE"), MPL2_LICENSE + "\n");
-
-    // Create src directory
-    const srcDir = path.join(dir, "src");
-    fs.mkdirSync(srcDir);
-
-    // Create src/register.js
-    const register = `// @openrock/${libName} - see README.
-// Pure functions are real top-level exports; register() exposes the API
-// through the kernel.
-"use strict";
-
-// TODO: Import your modules here
-// const myModule = require("./myModule.js");
-
-// TODO: Implement your API
-const stubApi = {
-    // greet(name) { return \`Hello, \${name}!\`; }
-};
-
-const api = { ...stubApi };
-
-function register() {
-    return { api };
-}
-
-module.exports = Object.assign(register, api);
-`;
-    fs.writeFileSync(path.join(srcDir, "register.js"), register);
-
-    // Create test directory
-    const testDir = path.join(dir, "test");
-    fs.mkdirSync(testDir);
-
-    // Create test file
-    const testFile = `#!/usr/bin/env node
-// Tests for @openrock/${libName}
-"use strict";
-
-const assert = require("assert");
-const lib = require("../src/register.js");
-
-let passed = 0;
-function test(name, fn) {
-    try { fn(); passed++; console.log(\`ok - \${name}\`); }
-    catch (e) { console.error(\`FAIL - \${name}\`); console.error(e); process.exitCode = 1; }
-}
-
-test("smoke: module loads and exports register function", () => {
-    assert.strictEqual(typeof lib, "function");
-    const { api } = lib();
-    assert.strictEqual(typeof api, "object");
-});
-
-console.log(\`\\n\${passed} passed\`);
-`;
-    fs.writeFileSync(path.join(testDir, `${libName}.test.js`), testFile);
-    fs.chmodSync(path.join(testDir, `${libName}.test.js`), 0o755);
-
-    console.log(`Created @openrock/${libName} at ${dir}`);
-    console.log("\nNext steps:");
-    console.log(`  1. cd ${dir}`);
-    console.log(`  2. Edit src/register.js to implement your API`);
-    console.log(`  3. npm test to run the smoke test`);
+    const pj = path.join(root, "package.json");
+    const rel = `libs/${name}/test/${name}.test.js`;
+    if (path.resolve(dir) === path.join(libsDir, name) && fs.existsSync(pj)) {
+        const p = JSON.parse(fs.readFileSync(pj, "utf8"));
+        if (!p.scripts.test.includes(rel)) { p.scripts.test += ` && node ${rel}`; fs.writeFileSync(pj, JSON.stringify(p, null, 2) + "\n"); }
+    }
+    console.log(`Created ${pkgName} at ${dir}`);
     return { ok: true, dir };
 }
 

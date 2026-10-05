@@ -1,0 +1,21 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "@openrock/notify",
+  "version": "0.1.0",
+  "entry": "src/register.js",
+  "dependsOn": {
+    "@openrock/i18n": {
+      "type": "library"
+    }
+  },
+  "provides": {
+    "api": "src/register.js",
+    "hookNamespaces": [
+      "notify"
+    ]
+  },
+  "scripts": {
+    "runtime": true
+  }
+}

@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-test",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

@@ -1,0 +1,21 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "@openrock/waypoints",
+  "version": "0.1.0",
+  "entry": "src/register.js",
+  "dependsOn": {
+    "@openrock/capabilities": {
+      "type": "library"
+    }
+  },
+  "provides": {
+    "api": "src/register.js",
+    "hookNamespaces": [
+      "waypoints"
+    ]
+  },
+  "scripts": {
+    "runtime": true
+  }
+}

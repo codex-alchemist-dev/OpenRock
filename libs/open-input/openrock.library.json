@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-input",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-fx",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

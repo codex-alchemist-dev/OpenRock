@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-saves",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

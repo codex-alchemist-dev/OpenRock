@@ -1,0 +1,21 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "@openrock/fx",
+  "version": "0.1.0",
+  "entry": "src/register.js",
+  "dependsOn": {
+    "@openrock/events": {
+      "type": "library"
+    }
+  },
+  "provides": {
+    "api": "src/register.js",
+    "hookNamespaces": [
+      "fx"
+    ]
+  },
+  "scripts": {
+    "runtime": true
+  }
+}

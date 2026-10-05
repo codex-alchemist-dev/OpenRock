@@ -87,7 +87,7 @@ async function main() {
             case "info": cmdInfo(modDir, flags, OPENROCK_ROOT); break;
             case "translate": await cmdTranslate(positional[1], modDir, flags); break;
             case "cinema": await cmdCinema(positional[1], modDir, flags); break;
-            case "scaffold": cmdScaffold(positional[1], positional[2]); break;
+            case "scaffold": cmdScaffold(positional[1], flags, OPENROCK_ROOT); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);
                 process.exitCode = cmd ? 1 : 0;

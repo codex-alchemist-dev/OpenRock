@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/input",
+  "version": "0.1.0",
+  "description": "Unified keybind/controller/touch abstraction over inputInfo for custom modes.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}

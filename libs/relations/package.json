@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/relations",
+  "version": "0.1.0",
+  "description": "Open-ended pairwise relationship tracks between any two ids; track names and growth rules defined by the mod.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}

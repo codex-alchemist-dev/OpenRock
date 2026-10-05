@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/help",
+  "version": "0.1.0",
+  "description": "In-game docs/tutorial pages from markdown: searchable and localized.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}

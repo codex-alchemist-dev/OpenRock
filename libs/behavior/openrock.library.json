@@ -1,0 +1,27 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "@openrock/behavior",
+  "version": "0.1.0",
+  "entry": "src/register.js",
+  "dependsOn": {
+    "@openrock/scan-scheduler": {
+      "type": "library"
+    },
+    "@openrock/perception": {
+      "type": "library"
+    },
+    "@openrock/pathfinding": {
+      "type": "library"
+    }
+  },
+  "provides": {
+    "api": "src/register.js",
+    "hookNamespaces": [
+      "behavior"
+    ]
+  },
+  "scripts": {
+    "runtime": true
+  }
+}

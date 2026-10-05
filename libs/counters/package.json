@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/counters",
+  "version": "0.1.0",
+  "description": "Sharded two-level counters (category -> subject) with size accounting vs the 32KB property limit and batched flush.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}

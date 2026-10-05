@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-abilities",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

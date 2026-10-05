@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-teams",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

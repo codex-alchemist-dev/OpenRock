@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/open-help",
-  "provides": {
-    "api": "lib",
-    "hookNamespaces": []
-  },
-  "dependencies": []
-}

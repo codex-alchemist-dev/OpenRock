@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/behavior",
+  "version": "0.1.0",
+  "description": "Behavior-tree / utility-AI runner for scripted entities; nodes registered by the mod.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}

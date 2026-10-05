@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/schedule",
+  "version": "0.1.0",
+  "description": "Time-of-day/calendar task scheduler for any subjects with catch-up semantics for unloaded chunks.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}
