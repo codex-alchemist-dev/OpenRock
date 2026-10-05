@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/saves",
-  "version": "0.1.0",
-  "description": "A/B-slot copy-validate-commit persistence with checksums, mirror recovery and soft-delete windows, generic over record kinds.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

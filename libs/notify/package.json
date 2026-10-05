@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/notify",
-  "version": "0.1.0",
-  "description": "Toast/action-bar/title queue with priorities and dedupe; localization-aware.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

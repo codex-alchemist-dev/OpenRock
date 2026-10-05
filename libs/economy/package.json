@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/economy",
-  "version": "0.1.0",
-  "description": "Currencies, audited transactions, and trade/price-table primitives.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

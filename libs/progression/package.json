@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/progression",
-  "version": "0.1.0",
-  "description": "Generic named values, xp curves and prerequisite/cost unlock graphs; derived values from registered formulas. No built-in stats.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

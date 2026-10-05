@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/waypoints",
-  "version": "0.1.0",
-  "description": "Markers, HUD pointers and an optional travel graph.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

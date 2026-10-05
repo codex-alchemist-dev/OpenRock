@@ -138,6 +138,7 @@ function validateManifest(manifest) {
         for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl", "manifestDsl", "blockDsl", "itemDsl", "cinemaDsl", "localization"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
+        if (c.generatedModules !== undefined) require("./generatedModules.js").validateGeneratedModules(c.generatedModules, `manifest "${manifest.name}"`);
         // entityDsl (Crystal Manifest-Entity, OR-Track M): a directory of
         // real *.entity.tsx files, compiled via
         // src/entityDsl/entityCompiler.js into real Bedrock entity JSON at

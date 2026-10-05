@@ -75,6 +75,7 @@ const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
 const { formatEsbuildFailure } = require("./buildDiagnostics.js");
 const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey, VIRTUAL_PREFIX } = require("./virtualModules.js");
 const { renderUiDir } = require("./uiStage.js");
+const { renderGeneratedModules } = require("./generatedModules.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -395,6 +396,11 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
             putMergingRegistries(rp, outRel, JSON.stringify(obj));
         }
         if (bp) put(bp, `${VIRTUAL_PREFIX}ui-screens.js`, ui.runtime);
+    }
+
+    // content.generatedModules: build-time Node providers of JS source -> @openrock/virtual/<name>.
+    if (content.generatedModules && bp) {
+        for (const [name, src] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, templateVars: vars })) put(bp, `${VIRTUAL_PREFIX}${name}.js`, src);
     }
 
     // content.datagenEntry (OR-Track B2, made real): a build-time-only Node

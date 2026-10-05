@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/debug",
-  "version": "0.1.0",
-  "description": "In-game debug overlay: per-subsystem tick cost, entity counts, property sizes vs limits.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

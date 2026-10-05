@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/dialogue",
-  "version": "0.1.0",
-  "description": "Branching conversation engine with a .dialogue text DSL; conditions/actions registered by the mod.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

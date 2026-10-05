@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/quests",
-  "version": "0.1.0",
-  "description": "Generic objective/state-machine engine; objective and reward types registered by the mod; per-subject state.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

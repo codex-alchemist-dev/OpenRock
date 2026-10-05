@@ -58,3 +58,69 @@
 [submodule "libs/config"]
 	path = libs/config
 	url = https://github.com/codex-alchemist-dev/OpenRock-Config.git
+[submodule "libs/audio"]
+	path = libs/audio
+	url = https://github.com/codex-alchemist-dev/OpenRock-Audio.git
+[submodule "libs/quests"]
+	path = libs/quests
+	url = https://github.com/codex-alchemist-dev/OpenRock-Quests.git
+[submodule "libs/teams"]
+	path = libs/teams
+	url = https://github.com/codex-alchemist-dev/OpenRock-Teams.git
+[submodule "libs/dialogue"]
+	path = libs/dialogue
+	url = https://github.com/codex-alchemist-dev/OpenRock-Dialogue.git
+[submodule "libs/fx"]
+	path = libs/fx
+	url = https://github.com/codex-alchemist-dev/OpenRock-FX.git
+[submodule "libs/schedule"]
+	path = libs/schedule
+	url = https://github.com/codex-alchemist-dev/OpenRock-Schedule.git
+[submodule "libs/relations"]
+	path = libs/relations
+	url = https://github.com/codex-alchemist-dev/OpenRock-Relations.git
+[submodule "libs/debug"]
+	path = libs/debug
+	url = https://github.com/codex-alchemist-dev/OpenRock-Debug.git
+[submodule "libs/notify"]
+	path = libs/notify
+	url = https://github.com/codex-alchemist-dev/OpenRock-Notify.git
+[submodule "libs/localization"]
+	path = libs/localization
+	url = https://github.com/codex-alchemist-dev/OpenRock-Localization.git
+[submodule "libs/behavior"]
+	path = libs/behavior
+	url = https://github.com/codex-alchemist-dev/OpenRock-Behavior.git
+[submodule "libs/waypoints"]
+	path = libs/waypoints
+	url = https://github.com/codex-alchemist-dev/OpenRock-Waypoints.git
+[submodule "libs/progression"]
+	path = libs/progression
+	url = https://github.com/codex-alchemist-dev/OpenRock-Progression.git
+[submodule "libs/loot"]
+	path = libs/loot
+	url = https://github.com/codex-alchemist-dev/OpenRock-Loot.git
+[submodule "libs/saves"]
+	path = libs/saves
+	url = https://github.com/codex-alchemist-dev/OpenRock-Saves.git
+[submodule "libs/cinema"]
+	path = libs/cinema
+	url = https://github.com/codex-alchemist-dev/OpenRock-Cinema.git
+[submodule "libs/counters"]
+	path = libs/counters
+	url = https://github.com/codex-alchemist-dev/OpenRock-Counters.git
+[submodule "libs/economy"]
+	path = libs/economy
+	url = https://github.com/codex-alchemist-dev/OpenRock-Economy.git
+[submodule "libs/abilities"]
+	path = libs/abilities
+	url = https://github.com/codex-alchemist-dev/OpenRock-Abilities.git
+[submodule "libs/help"]
+	path = libs/help
+	url = https://github.com/codex-alchemist-dev/OpenRock-Help.git
+[submodule "libs/test"]
+	path = libs/test
+	url = https://github.com/codex-alchemist-dev/OpenRock-Test.git
+[submodule "libs/input"]
+	path = libs/input
+	url = https://github.com/codex-alchemist-dev/OpenRock-Input.git

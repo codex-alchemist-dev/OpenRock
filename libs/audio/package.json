@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/audio",
-  "version": "0.1.0",
-  "description": "Sound/music director: playlists, crossfade by state/region, ducking during cinema/dialogue.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}

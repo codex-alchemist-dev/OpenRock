@@ -1,8 +1,0 @@
-{
-  "name": "@openrock/loot",
-  "version": "0.1.0",
-  "description": "Weighted/conditional loot tables beyond vanilla, with pity and per-subject seeds; datagen emitter.",
-  "license": "MPL-2.0",
-  "private": true,
-  "main": "src/register.js"
-}
