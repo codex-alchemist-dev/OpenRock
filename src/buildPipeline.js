@@ -73,7 +73,8 @@ const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./s
 const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
 const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
 const { formatEsbuildFailure } = require("./buildDiagnostics.js");
-const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey } = require("./virtualModules.js");
+const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey, VIRTUAL_PREFIX } = require("./virtualModules.js");
+const { renderUiDir } = require("./uiStage.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -97,6 +98,17 @@ function fill(text, vars) {
 }
 
 const put = (map, rel, data) => map.set(rel, Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
+
+/** Writes a file; shared registry JSONs (MERGED_FILES) merge with what an earlier package already put there. */
+function putMergingRegistries(map, outRel, data) {
+    if (MERGED_FILES.has(outRel) && map.has(outRel)) {
+        const base = JSON.parse(map.get(outRel).toString("utf8"));
+        const add = JSON.parse(typeof data === "string" ? data : data.toString("utf8"));
+        put(map, outRel, JSON.stringify(mergeRegistry(base, add), null, 2) + "\n");
+    } else {
+        put(map, outRel, data);
+    }
+}
 
 // Every real "directory of *.<kind>.tsx files, compiled into real Bedrock
 // JSON" Crystal Manifest-* dialect (Crystal Manifest-Entity, -Block,
@@ -370,14 +382,19 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
             const outRel = fill(rel, vars);
             assertNotNativeOnlyPath(manifest.name, outRel);
             const data = TEXT_EXT.has(path.extname(rel)) ? fill(raw.toString("utf8"), vars) : raw;
-            if (MERGED_FILES.has(outRel) && map.has(outRel)) {
-                const base = JSON.parse(map.get(outRel).toString("utf8"));
-                const add = JSON.parse(typeof data === "string" ? data : data.toString("utf8"));
-                put(map, outRel, JSON.stringify(mergeRegistry(base, add), null, 2) + "\n");
-            } else {
-                put(map, outRel, data);
-            }
+            putMergingRegistries(map, outRel, data);
         }
+    }
+
+    // content.uiDir (MinUI): *.ui.html / *.ui.css -> JSON UI in the resource pack + the
+    // runtime screen table as the virtual module @openrock/virtual/ui-screens.
+    if (content.uiDir) {
+        const ui = renderUiDir(path.join(entryDir, content.uiDir));
+        for (const [outRel, obj] of Object.entries(ui.rp)) {
+            assertNotNativeOnlyPath(manifest.name, outRel);
+            putMergingRegistries(rp, outRel, JSON.stringify(obj));
+        }
+        if (bp) put(bp, `${VIRTUAL_PREFIX}ui-screens.js`, ui.runtime);
     }
 
     // content.datagenEntry (OR-Track B2, made real): a build-time-only Node
