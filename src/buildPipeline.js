@@ -66,11 +66,13 @@ const semver = require("./semver.js");
 const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
 const { compileBlockDsl } = require("./blockDsl/blockCompiler.js");
 const { compileItemDsl } = require("./itemDsl/itemCompiler.js");
+const { compileCinemaDsl } = require("./cinemaDsl/cinemaCompiler.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
 const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
 const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
 const { formatEsbuildFailure } = require("./buildDiagnostics.js");
+const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey } = require("./virtualModules.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -108,6 +110,7 @@ const DIRECTORY_DSLS = [
     { contentField: "entityDsl", compile: compileEntityDsl },
     { contentField: "blockDsl", compile: compileBlockDsl },
     { contentField: "itemDsl", compile: compileItemDsl },
+    { contentField: "cinemaDsl", compile: compileCinemaDsl },
 ];
 
 /**
@@ -282,7 +285,7 @@ function putJson(map, outRel, obj) {
 // never gets accidentally run through JSON.stringify() (which would
 // mangle it into a {"type":"Buffer","data":[...]} object, not real bytes).
 function putDirectoryDslEntry(map, outRel, value) {
-    if (Buffer.isBuffer(value)) put(map, outRel, value);
+    if (Buffer.isBuffer(value) || typeof value === "string") put(map, outRel, value);
     else putJson(map, outRel, value);
 }
 
@@ -439,7 +442,11 @@ function renderScripts(plan, bp) {
     const { modManifest, rootEntry } = plan;
     const lintIssues = [];
     if (rootEntry) {
-        const { js, map } = bundleScripts(modManifest, rootEntry, plan.resolveMap);
+        // Generated "virtual" modules a build-time compiler emitted into bp
+        // (src/virtualModules.js) become importable as @openrock/virtual/<name>.
+        const resolveMap = new Map(plan.resolveMap);
+        for (const [specifier, file] of materializeVirtualModules(extractVirtualModules(bp))) resolveMap.set(specifier, file);
+        const { js, map } = bundleScripts(modManifest, rootEntry, resolveMap);
         lintIssues.push(...checkScriptModulesCompleteness(js, modManifest.engine?.scriptModules, modManifest.name));
         lintIssues.push(...scanEarlyExecutionCalls(js, modManifest.name));
         put(bp, "scripts/main.js", js);
@@ -530,7 +537,7 @@ function buildMod(modDir, opts = {}) {
     if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
 
     assertNoLintIssues(plan.modManifest, lintIssues);
-    return { bp, rp, manifest: plan.modManifest };
+    return { bp: stripVirtual(bp), rp, manifest: plan.modManifest };
 }
 
 // Resolves which file, if any, is this package's own real in-game script
@@ -771,7 +778,7 @@ function createIncrementalBuild(modDir, opts = {}) {
                 }
             }
         }
-        return { bp, rp, manifest: plan.modManifest };
+        return { bp: stripVirtual(bp), rp, manifest: plan.modManifest };
     }
 
     function rebuild(absChangedPath) {
@@ -830,6 +837,12 @@ function createIncrementalBuild(modDir, opts = {}) {
 
                 for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
                 if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), doc);
+                // Generated virtual script modules feed the bundle, so a
+                // change to one means the bundle itself must be re-rendered.
+                if ([...freshBpKeys, ...previous.bp].some(isVirtualKey)) {
+                    const scriptIssues = renderScripts(plan, bp);
+                    assertNoLintIssues(plan.modManifest, scriptIssues);
+                }
                 break;
             }
             case "scripts": {
@@ -837,7 +850,7 @@ function createIncrementalBuild(modDir, opts = {}) {
                 const lintIssues = renderScripts(plan, bp);
                 lintIssues.push(...runEntityLints({ bp, rp }));
                 assertNoLintIssues(plan.modManifest, lintIssues);
-                return { bp, rp, manifest: plan.modManifest };
+                return { bp: stripVirtual(bp), rp, manifest: plan.modManifest };
             }
             case "datagen": {
                 // Can emit into BOTH bp and rp, and can merge-register into
@@ -854,7 +867,7 @@ function createIncrementalBuild(modDir, opts = {}) {
 
         const lintIssues = runEntityLints({ bp, rp });
         assertNoLintIssues(plan.modManifest, lintIssues);
-        return { bp, rp, manifest: plan.modManifest };
+        return { bp: stripVirtual(bp), rp, manifest: plan.modManifest };
     }
 
     return { build: fullBuild, rebuild, isFullBuild: () => lastWasFullBuild };

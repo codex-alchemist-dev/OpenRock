@@ -127,7 +127,7 @@ function validateManifest(manifest) {
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
-        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl", "manifestDsl", "blockDsl", "itemDsl"]) {
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "entityDsl", "manifestDsl", "blockDsl", "itemDsl", "cinemaDsl"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
         // entityDsl (Crystal Manifest-Entity, OR-Track M): a directory of
