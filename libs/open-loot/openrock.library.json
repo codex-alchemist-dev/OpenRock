@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-loot",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

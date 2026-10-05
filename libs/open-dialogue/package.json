@@ -1,0 +1,14 @@
+{
+  "name": "@openrock/open-dialogue",
+  "version": "1.0.0",
+  "description": "OpenRock library: open-dialogue",
+  "main": "src/register.js",
+  "scripts": {
+    "test": "node test/open-dialogue.test.js"
+  },
+  "license": "MPL-2.0",
+  "keywords": [
+    "openrock",
+    "bedrock-edition"
+  ]
+}

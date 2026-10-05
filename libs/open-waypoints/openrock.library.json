@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-waypoints",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

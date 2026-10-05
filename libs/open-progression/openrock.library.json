@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-progression",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

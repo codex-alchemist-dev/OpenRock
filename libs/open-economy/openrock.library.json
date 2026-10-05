@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-economy",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

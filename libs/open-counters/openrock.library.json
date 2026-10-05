@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-counters",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-notify",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

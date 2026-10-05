@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-behavior",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}

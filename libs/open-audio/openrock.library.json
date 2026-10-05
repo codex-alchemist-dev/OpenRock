@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/open-audio",
+  "provides": {
+    "api": "lib",
+    "hookNamespaces": []
+  },
+  "dependencies": []
+}
