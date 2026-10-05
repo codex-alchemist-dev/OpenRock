@@ -121,4 +121,121 @@ function writeXlsx(filePath, catalog, languages) {
     return workbook.xlsx.writeFile(filePath);
 }
 
-module.exports = { readCsv, readXlsx, writeCsv, writeXlsx };
+function parseCsv(text) {
+    const rows = [];
+    let current = [];
+    let cell = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+
+        if (inQuotes) {
+            if (ch === '"' && next === '"') {
+                cell += '"';
+                i++;
+            } else if (ch === '"') {
+                inQuotes = false;
+            } else {
+                cell += ch;
+            }
+        } else {
+            if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === "," || ch === "\n" || (ch === "\r" && next === "\n")) {
+                current.push(cell);
+                cell = "";
+                if (ch === "\n" || (ch === "\r" && next === "\n")) {
+                    rows.push(current);
+                    current = [];
+                    if (ch === "\r") i++;
+                }
+            } else if (ch !== "\r") {
+                cell += ch;
+            }
+        }
+    }
+    if (cell || current.length) {
+        current.push(cell);
+        if (current.length) rows.push(current);
+    }
+    return rows;
+}
+
+function toCsv(rows) {
+    return rows.map(row =>
+        row.map(cell => {
+            if (typeof cell !== "string") cell = String(cell || "");
+            if (cell.includes(",") || cell.includes('"') || cell.includes("\n")) {
+                return `"${cell.replace(/"/g, '""')}"`;
+            }
+            return cell;
+        }).join(",")
+    ).join("\n");
+}
+
+function catalogToRows(catalog, languages) {
+    const rows = [["key", "context", "source", ...languages, ...languages.map(l => `${l}:status`)]];
+    for (const [key, entry] of Object.entries(catalog.entries || {})) {
+        const row = [
+            key,
+            entry.context || "",
+            entry.source || "",
+            ...languages.map(lang => entry.translations[lang]?.text || ""),
+            ...languages.map(lang => entry.translations[lang]?.status || "source"),
+        ];
+        rows.push(row);
+    }
+    return rows;
+}
+
+function importRows(catalog, rows) {
+    if (rows.length < 2) return { applied: 0, skipped: [] };
+    const header = rows[0];
+    const langs = header.slice(3).filter(l => !l.includes(":"));
+    const langCount = langs.length;
+    const applied = [];
+    const skipped = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const key = row[0];
+        if (!key) continue;
+
+        const entry = catalog.entries?.[key];
+        if (!entry) continue;
+
+        const source = row[2];
+        if (source !== entry.source) {
+            // Ignore source edits
+        }
+
+        for (let j = 0; j < langCount; j++) {
+            const lang = langs[j];
+            const text = row[3 + j];
+            const status = row[3 + langCount + j];
+            const current = entry.translations[lang];
+
+            if (text === (current?.text || "")) {
+                if (status && status !== current?.status) {
+                    entry.translations[lang] = { ...current, status };
+                    applied.push({ key, lang });
+                }
+            } else if (text) {
+                const placeOld = (current?.text || "").match(/%(?:\d+\$)?s/g) || [];
+                const placeNew = text.match(/%(?:\d+\$)?s/g) || [];
+                if (placeOld.length !== placeNew.length) {
+                    skipped.push({ key, lang, reason: "placeholders differ" });
+                } else {
+                    entry.translations[lang] = { text, status: "reviewed", from: entry.sourceHash };
+                    applied.push({ key, lang });
+                }
+            }
+        }
+    }
+
+    return { applied: applied.length, skipped };
+}
+
+module.exports = { parseCsv, toCsv, catalogToRows, importRows, readCsv, readXlsx, writeCsv, writeXlsx };
