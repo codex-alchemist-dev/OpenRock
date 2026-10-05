@@ -3,6 +3,9 @@
 // register() exposes the same API object through the kernel.
 "use strict";
 
+// Load built-in HTTP providers
+require("./providers/index.js");
+
 const placeholders = require("./placeholders.js");
 const langFile = require("./langFile.js");
 const catalog = require("./catalog.js");
