@@ -38,7 +38,7 @@ uncommitted; never substitute an easier task for the stated one - if blocked, wr
   but semantically equal. Anything else is a bug. Entity JSON from entityDsl may differ textually: compare semantically and list.
 - Scripts are gated differently: `openrock check` runs the BDS smoke test; additionally run OpenChara's devtools harnesses on BDS if available.
 
-## Phase 1 - Build infra in OpenRock (all [S]; this is the real engineering)
+## Phase 1 - Build infra in OpenRock (all [S]) - **DONE 2026-10-05** (1.1 templateVars, 1.2 uiDir, 1.3/1.5 generatedModules incl. file output, 1.4 lang runtime + game-locale gating + cross-package merge + pack.name injection, 1.6 manifest already carries folders/UUIDs/engine versions/authors; `displayName`+`description` feed pack.name/description). Remaining knobs for Phase 3/4: MinUI runtime scripts + rp assets still need to be shipped (see 3.4).
 
 1.1 **Template vars.** Extend mod/library manifest with `templateVars` (object) merged into `fill()` vars in `renderEntryContent`
     and the DSL compilers; keep `{{ns}}` default. Tests in `test/buildPipeline.test.js`.
@@ -59,6 +59,8 @@ uncommitted; never substitute an easier task for the stated one - if blocked, wr
     (`@minecraft/server 2.6.0`, `@minecraft/server-ui 2.0.0`), authors. Add what is missing.
 
 Gate: all OpenRock tests green; fixture covering 1.1-1.4 passes.
+
+3.4 [S] MinUI runtime/rp assets: `../MinUI/runtime/*.js` (-> `scripts/openchara/ui/`) and `../MinUI/rp/**` must reach the pack. Make MinUI an OpenRock library (`@minui/core`, scriptsDir=runtime, rpOverlayDir=rp) that OpenChara `dependsOn`; engine imports `./ui/i18n.js` etc. must resolve (bundler aliases) and `./lang.generated.js` / `./screens.generated.js` become `@openrock/virtual/localization-tables` / `@openrock/virtual/ui-screens`.
 
 ## Phase 2 - Convert OpenChara engine assets to Crystal DSL ([S] decisions, [H] repetition once pattern proven)
 
