@@ -1,241 +1,87 @@
-// Spreadsheet round-trip for localization catalogs (CSV/XLSX).
-// Exported functions: readCsv, readXlsx, writeCsv, writeXlsx
+// Spreadsheet round-trip (CSV; XLSX is a thin wrapper over the same rows).
+// Columns: key, context, source, then per language `<lang>` and `<lang>:status`.
+// Importing never lets a sheet corrupt placeholders and never edits sources.
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
+const { statusOf, setTranslation } = require("./catalog.js");
+const { comparePlaceholders } = require("./placeholders.js");
 
-function readCsv(filePath) {
-    const content = fs.readFileSync(filePath, "utf8");
-    const lines = content.split(/\r?\n/);
-    if (lines.length === 0) return { catalog: [], languages: [] };
-
-    const header = lines[0].split("\t").map(h => h.trim());
-    const languages = header.slice(3).filter(h => !["status", "notes"].includes(h));
-    const catalog = [];
-
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
-        const cells = line.split("\t");
-        const entry = {
-            key: cells[0]?.trim() || "",
-            context: cells[1]?.trim() || "",
-            source: cells[2]?.trim() || "",
-            translations: {},
-            status: cells[3 + languages.length]?.trim() || "source",
-            notes: cells[4 + languages.length]?.trim() || "",
-        };
-        for (let j = 0; j < languages.length; j++) {
-            entry.translations[languages[j]] = cells[3 + j]?.trim() || "";
-        }
-        if (entry.key) catalog.push(entry);
-    }
-    return { catalog, languages };
-}
-
-function writeCsv(filePath, catalog, languages) {
-    const header = ["key", "context", "source", ...languages, "status", "notes"];
-    const lines = [header.join("\t")];
-    for (const entry of catalog) {
-        const row = [
-            entry.key,
-            entry.context || "",
-            entry.source || "",
-            ...languages.map(lang => entry.translations[lang] || ""),
-            entry.status || "source",
-            entry.notes || "",
-        ];
-        lines.push(row.join("\t"));
-    }
-    fs.writeFileSync(filePath, lines.join("\n"), "utf8");
-}
-
-function readXlsx(filePath) {
-    const ExcelJS = require("exceljs");
-    const workbook = new ExcelJS.Workbook();
-    return workbook.xlsx.readFile(filePath).then(() => {
-        const worksheet = workbook.worksheets[0];
-        if (!worksheet) return { catalog: [], languages: [] };
-
-        const header = [];
-        worksheet.getRow(1).eachCell({ dense: false }, (cell, colNum) => {
-            header[colNum - 1] = cell.value ? String(cell.value).trim() : "";
-        });
-
-        const languages = header.slice(3).filter(h => !["status", "notes"].includes(h));
-        const catalog = [];
-
-        for (let rowNum = 2; rowNum <= worksheet.rowCount; rowNum++) {
-            const row = worksheet.getRow(rowNum);
-            const key = String(row.getCell(1).value || "").trim();
-            if (!key) continue;
-
-            const entry = {
-                key,
-                context: String(row.getCell(2).value || "").trim(),
-                source: String(row.getCell(3).value || "").trim(),
-                translations: {},
-                status: String(row.getCell(4 + languages.length)?.value || "source").trim(),
-                notes: String(row.getCell(5 + languages.length)?.value || "").trim(),
-            };
-            for (let j = 0; j < languages.length; j++) {
-                entry.translations[languages[j]] = String(row.getCell(4 + j)?.value || "").trim();
-            }
-            catalog.push(entry);
-        }
-        return { catalog, languages };
-    });
-}
-
-function writeXlsx(filePath, catalog, languages) {
-    const ExcelJS = require("exceljs");
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Localization");
-
-    const header = ["key", "context", "source", ...languages, "status", "notes"];
-    worksheet.addRow(header);
-    worksheet.getRow(1).font = { bold: true };
-
-    for (const entry of catalog) {
-        const row = [
-            entry.key,
-            entry.context || "",
-            entry.source || "",
-            ...languages.map(lang => entry.translations[lang] || ""),
-            entry.status || "source",
-            entry.notes || "",
-        ];
-        worksheet.addRow(row);
-    }
-
-    worksheet.columns = [
-        { key: "key", width: 20, readOnly: true },
-        { key: "context", width: 30 },
-        { key: "source", width: 40, readOnly: true },
-        ...languages.map(lang => ({ key: lang, width: 25 })),
-        { key: "status", width: 12 },
-        { key: "notes", width: 20 },
-    ];
-
-    return workbook.xlsx.writeFile(filePath);
-}
-
-function parseCsv(text) {
-    const rows = [];
-    let current = [];
-    let cell = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        const next = text[i + 1];
-
-        if (inQuotes) {
-            if (ch === '"' && next === '"') {
-                cell += '"';
-                i++;
-            } else if (ch === '"') {
-                inQuotes = false;
-            } else {
-                cell += ch;
-            }
-        } else {
-            if (ch === '"') {
-                inQuotes = true;
-            } else if (ch === "," || ch === "\n" || (ch === "\r" && next === "\n")) {
-                current.push(cell);
-                cell = "";
-                if (ch === "\n" || (ch === "\r" && next === "\n")) {
-                    rows.push(current);
-                    current = [];
-                    if (ch === "\r") i++;
-                }
-            } else if (ch !== "\r") {
-                cell += ch;
-            }
-        }
-    }
-    if (cell || current.length) {
-        current.push(cell);
-        if (current.length) rows.push(current);
-    }
-    return rows;
+function csvEscape(v) {
+    const s = String(v ?? "");
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 function toCsv(rows) {
-    return rows.map(row =>
-        row.map(cell => {
-            if (typeof cell !== "string") cell = String(cell || "");
-            if (cell.includes(",") || cell.includes('"') || cell.includes("\n")) {
-                return `"${cell.replace(/"/g, '""')}"`;
-            }
-            return cell;
-        }).join(",")
-    ).join("\n");
+    return "﻿" + rows.map(r => r.map(csvEscape).join(",")).join("\r\n") + "\r\n";
 }
 
-function catalogToRows(catalog, languages) {
-    const rows = [["key", "context", "source", ...languages, ...languages.map(l => `${l}:status`)]];
-    for (const [key, entry] of Object.entries(catalog.entries || {})) {
-        const row = [
-            key,
-            entry.context || "",
-            entry.source || "",
-            ...languages.map(lang => entry.translations[lang]?.text || ""),
-            ...languages.map(lang => entry.translations[lang]?.status || "source"),
-        ];
+/** RFC 4180 parser: quoted fields, escaped quotes, embedded newlines, BOM, CRLF/LF. */
+function parseCsv(text) {
+    const rows = [];
+    let row = [], field = "", i = 0, inQuotes = false;
+    const src = text.replace(/^﻿/, "");
+    while (i < src.length) {
+        const c = src[i];
+        if (inQuotes) {
+            if (c === '"') { if (src[i + 1] === '"') { field += '"'; i += 2; continue; } inQuotes = false; i++; continue; }
+            field += c; i++; continue;
+        }
+        if (c === '"') { inQuotes = true; i++; continue; }
+        if (c === ",") { row.push(field); field = ""; i++; continue; }
+        if (c === "\r" || c === "\n") {
+            if (c === "\r" && src[i + 1] === "\n") i++;
+            row.push(field); field = ""; rows.push(row); row = []; i++; continue;
+        }
+        field += c; i++;
+    }
+    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(r => !(r.length === 1 && r[0] === ""));
+}
+
+function catalogToRows(catalog, langs) {
+    const header = ["key", "context", "source"];
+    for (const l of langs) header.push(l, `${l}:status`);
+    const rows = [header];
+    for (const [key, e] of Object.entries(catalog.entries).sort(([a], [b]) => a.localeCompare(b))) {
+        if (e.orphaned) continue;
+        const row = [key, e.context, e.source];
+        for (const l of langs) row.push(e.translations[l]?.text ?? "", statusOf(e, l));
         rows.push(row);
     }
     return rows;
 }
 
+/**
+ * Merges an edited sheet back. A cell whose text differs from the catalog is a
+ * human edit -> "reviewed". An unchanged cell whose status cell was set to
+ * "reviewed" is an approval. Placeholder-breaking cells are skipped.
+ * @returns {{applied: number, skipped: Array<{key: string, lang: string, reason: string}>}}
+ */
 function importRows(catalog, rows) {
-    if (rows.length < 2) return { applied: 0, skipped: [] };
-    const header = rows[0];
-    const langs = header.slice(3).filter(l => !l.includes(":"));
-    const langCount = langs.length;
-    const applied = [];
+    const [header, ...body] = rows;
+    if (!header || header[0] !== "key") throw new Error("sheet import: first column must be \"key\"");
+    const langCols = header.map((name, idx) => ({ name, idx })).filter(c => c.idx >= 3 && !c.name.endsWith(":status") && c.name);
+    let applied = 0;
     const skipped = [];
-
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
+    for (const row of body) {
         const key = row[0];
-        if (!key) continue;
-
-        const entry = catalog.entries?.[key];
-        if (!entry) continue;
-
-        const source = row[2];
-        if (source !== entry.source) {
-            // Ignore source edits
-        }
-
-        for (let j = 0; j < langCount; j++) {
-            const lang = langs[j];
-            const text = row[3 + j];
-            const status = row[3 + langCount + j];
+        const entry = catalog.entries[key];
+        if (!entry || entry.orphaned) { skipped.push({ key, lang: "*", reason: "unknown or orphaned key" }); continue; }
+        for (const { name: lang, idx } of langCols) {
+            const text = row[idx] ?? "";
+            if (text === "") continue;
+            const statusCell = header.indexOf(`${lang}:status`) >= 0 ? row[header.indexOf(`${lang}:status`)] : "";
             const current = entry.translations[lang];
-
-            if (text === (current?.text || "")) {
-                if (status && status !== current?.status) {
-                    entry.translations[lang] = { ...current, status };
-                    applied.push({ key, lang });
-                }
-            } else if (text) {
-                const placeOld = (current?.text || "").match(/%(?:\d+\$)?s/g) || [];
-                const placeNew = text.match(/%(?:\d+\$)?s/g) || [];
-                if (placeOld.length !== placeNew.length) {
-                    skipped.push({ key, lang, reason: "placeholders differ" });
-                } else {
-                    entry.translations[lang] = { text, status: "reviewed", from: entry.sourceHash };
-                    applied.push({ key, lang });
-                }
-            }
+            const changed = !current || current.text !== text;
+            const approving = !changed && statusCell === "reviewed" && current.status !== "reviewed";
+            if (!changed && !approving) continue;
+            const cmp = comparePlaceholders(entry.source, text);
+            if (!cmp.ok) { skipped.push({ key, lang, reason: `placeholders differ (missing: ${cmp.missing.join(" ") || "-"}; extra: ${cmp.extra.join(" ") || "-"})` }); continue; }
+            setTranslation(catalog, key, lang, text, "reviewed");
+            applied++;
         }
     }
-
-    return { applied: applied.length, skipped };
+    return { applied, skipped };
 }
 
-module.exports = { parseCsv, toCsv, catalogToRows, importRows, readCsv, readXlsx, writeCsv, writeXlsx };
+module.exports = { toCsv, parseCsv, catalogToRows, importRows };

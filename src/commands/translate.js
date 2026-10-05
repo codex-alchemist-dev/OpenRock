@@ -49,15 +49,18 @@ async function cmdTranslate(sub, modDir, flags = []) {
         }
         case "export": {
             loc.syncCatalog(project);
-            const out = path.resolve(flagValue(flags, "out") ?? path.join(project.locDir, "translations.csv"));
-            fs.writeFileSync(out, loc.toCsv(loc.catalogToRows(project.catalog, langs)));
+            const xlsx = flagValue(flags, "format") === "xlsx";
+            const out = path.resolve(flagValue(flags, "out") ?? path.join(project.locDir, xlsx ? "translations.xlsx" : "translations.csv"));
+            const rows = loc.catalogToRows(project.catalog, langs);
+            if (xlsx) await loc.writeXlsx(out, rows); else fs.writeFileSync(out, loc.toCsv(rows));
             report = { ok: true, out };
             say(`wrote ${out}`);
             break;
         }
         case "import": {
             const file = path.resolve(flagValue(flags, "file") ?? path.join(project.locDir, "translations.csv"));
-            const r = loc.importRows(project.catalog, loc.parseCsv(fs.readFileSync(file, "utf8")));
+            const rows = file.endsWith(".xlsx") ? await loc.readXlsx(file) : loc.parseCsv(fs.readFileSync(file, "utf8"));
+            const r = loc.importRows(project.catalog, rows);
             loc.saveCatalog(project);
             report = { ok: r.skipped.length === 0, applied: r.applied, skipped: r.skipped };
             say(`imported ${r.applied} translations from ${file}`);
