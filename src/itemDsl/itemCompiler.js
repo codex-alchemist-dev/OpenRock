@@ -3,6 +3,8 @@
 // real tsc, real requireCompiled(), OR-Track Q6's real compile cache.
 "use strict";
 
+const { tsPaths, withAlias } = require("../dslAlias.js");
+
 const fs = require("fs");
 const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
@@ -50,7 +52,7 @@ function compileItemDsl(itemDslDir, { outDir } = {}) {
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
         const realOutDir = outDir ?? path.join(itemDslDir, ".item-dsl-dist");
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
-        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir }, include: sourceFiles };
+        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir, ...tsPaths("item", itemDslDir) }, include: sourceFiles };
         const tsconfigPath = path.join(itemDslDir, "tsconfig.item-dsl.json");
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
@@ -66,7 +68,7 @@ function compileItemDsl(itemDslDir, { outDir } = {}) {
             const baseName = sourceFile.replace(/\.item\.tsx?$/, "");
             const compiledPath = findCompiledFile(realOutDir, `${baseName}.item.js`);
             if (!compiledPath) throw new Error(`itemCompiler: couldn't find compiled output for "${sourceFile}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
-            const mod = requireCompiled(compiledPath);
+            const mod = withAlias("item", () => requireCompiled(compiledPath));
             const itemNode = mod.default ?? mod;
             if (!itemNode || itemNode.tag !== "Item") {
                 throw new Error(`itemCompiler: "${sourceFile}" must default-export a real <Item> node, got ${JSON.stringify(itemNode)}`);

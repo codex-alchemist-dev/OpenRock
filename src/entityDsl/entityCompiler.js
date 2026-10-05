@@ -8,6 +8,8 @@
 // proven emission backend.
 "use strict";
 
+const { tsPaths, withAlias } = require("../dslAlias.js");
+
 const fs = require("fs");
 const path = require("path");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
@@ -126,7 +128,7 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
         const tsconfig = {
             ...template,
-            compilerOptions: { ...template.compilerOptions, outDir: realOutDir },
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, ...tsPaths("entity", entityDslDir) },
             include: sourceFiles,
         };
         const tsconfigPath = path.join(entityDslDir, "tsconfig.entity-dsl.json");
@@ -145,7 +147,7 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
             const baseName = sourceFile.replace(/\.entity\.tsx?$/, "");
             const compiledPath = findCompiledFile(realOutDir, `${baseName}.entity.js`);
             if (!compiledPath) throw new Error(`entityCompiler: couldn't find compiled output for "${sourceFile}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
-            const mod = requireCompiled(compiledPath);
+            const mod = withAlias("entity", () => requireCompiled(compiledPath));
             const entityNode = mod.default ?? mod;
             if (!entityNode || entityNode.tag !== "Entity") {
                 throw new Error(`entityCompiler: "${sourceFile}" must default-export a real <Entity> node, got ${JSON.stringify(entityNode)}`);

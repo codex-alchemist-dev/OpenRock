@@ -41,16 +41,17 @@ class EntityBuilder {
     }
 
     /** @returns {object} the real, final `minecraft:entity` (BP) document. */
-    toJSON(identifier, { spawnable = false, summonable = true, experimental = false } = {}) {
+    toJSON(identifier, { spawnable = false, summonable = true, experimental = false, runtimeIdentifier, formatVersion = "1.20.0" } = {}) {
         const components = { ...this.components };
         if (this.environmentSensorTriggers.length > 0) {
             components["minecraft:environment_sensor"] = { triggers: this.environmentSensorTriggers };
         }
         const doc = {
-            format_version: "1.20.0",
+            format_version: formatVersion,
             "minecraft:entity": {
                 description: {
                     identifier,
+                    ...(runtimeIdentifier ? { runtime_identifier: runtimeIdentifier } : {}),
                     is_spawnable: spawnable,
                     is_summonable: summonable,
                     is_experimental: experimental,
@@ -76,7 +77,7 @@ class EntityBuilder {
 // props at all - a real, deliberate choice (a summon-only helper entity
 // with no client presence), never a required document.
 function buildClientEntityDoc(identifier, attrs) {
-    const { materials, textures, geometry, renderControllers, spawnEgg, enableAttachables, hideArmor } = attrs;
+    const { materials, textures, geometry, renderControllers, spawnEgg, enableAttachables, hideArmor, clientFormatVersion = "1.16.0" } = attrs;
     if (!materials && !textures && !geometry && !renderControllers && !spawnEgg) return null;
     const description = { identifier };
     if (materials) description.materials = materials;
@@ -86,7 +87,7 @@ function buildClientEntityDoc(identifier, attrs) {
     if (spawnEgg) description.spawn_egg = spawnEgg;
     if (enableAttachables !== undefined) description.enable_attachables = enableAttachables;
     if (hideArmor !== undefined) description.hide_armor = hideArmor;
-    return { format_version: "1.16.0", "minecraft:client_entity": { description } };
+    return { format_version: clientFormatVersion, "minecraft:client_entity": { description } };
 }
 
 // A minimal sink used only for a <ComponentGroup>'s own children - real

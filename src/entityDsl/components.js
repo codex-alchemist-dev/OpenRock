@@ -55,6 +55,10 @@ function Entity(props) {
             spawnEgg: props.spawnEgg,
             enableAttachables: props.enableAttachables,
             hideArmor: props.hideArmor,
+            // Behavior-pack / client-entity document versions and the vanilla entity whose behavior to borrow.
+            formatVersion: props.formatVersion,
+            clientFormatVersion: props.clientFormatVersion,
+            runtimeIdentifier: props.runtimeIdentifier,
         },
         children: props.children ?? [],
         line: 0,

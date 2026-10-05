@@ -1,5 +1,5 @@
-import * as OpenRockEntity from "../../../src/entityDsl/jsx-runtime.js";
-import { Entity, TypeFamily, Health, Movement, NavigationWalk, Physics, CollisionBox, Pushable, RawComponent, Pathfinding } from "../../../src/entityDsl/components.js";
+import * as OpenRockEntity from "@openrock/entity-dsl/jsx-runtime";
+import { Entity, TypeFamily, Health, Movement, NavigationWalk, Physics, CollisionBox, Pushable, RawComponent, Pathfinding } from "@openrock/entity-dsl";
 
 export default (
     <Entity identifier="{{ns}}:{{char}}_nav" spawnable summonable>
