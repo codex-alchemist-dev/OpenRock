@@ -78,7 +78,7 @@ const { computeVars, fill, fillDoc } = require("./dslVars.js");
 const { stageScripts } = require("./scriptMounts.js");
 const { renderUiDir } = require("./uiStage.js");
 const { renderGeneratedModules } = require("./generatedModules.js");
-const { isMergedLangOutput, mergeLangOutput, injectPackStrings } = require("./packLang.js");
+const { isMergedLangOutput, mergeLangOutput, injectPackStrings, layerOverSource } = require("./packLang.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -152,8 +152,11 @@ function collectEntries(rootManifest, rootDir, { vendorDir, libraryDirs = {} } =
             if (dep.soft) continue;
             let depDir;
             if (dep.type === "submodule") {
-                if (!vendorDir) throw new Error(`"${manifest.name}" depends on submodule "${depName}", but no vendorDir was given`);
-                depDir = path.join(vendorDir, dep.path);
+                if (dep.relativeTo === "package") depDir = path.resolve(entryDir, dep.path); // sibling checkout, e.g. ../OpenChara
+                else {
+                    if (!vendorDir) throw new Error(`"${manifest.name}" depends on submodule "${depName}", but no vendorDir was given`);
+                    depDir = path.join(vendorDir, dep.path);
+                }
             } else if (dep.type === "library") {
                 depDir = libraryDirs[depName];
                 if (!depDir) {
@@ -279,10 +282,15 @@ function resolveBuildPlan(modDir, { vendorDir, libraryDirs = {} } = {}) {
         // A real content.scriptsDir entry overrides the provides.api alias
         // above for its own package name - resolved second, deliberately.
         for (const { manifest, dir: entryDir } of scriptEntries) {
-            const entryFile = manifest.content.scriptMounts
-                ? resolveScriptEntry({ ...manifest, content: { ...manifest.content, scriptsDir: "." } }, stageScripts(manifest, entryDir))
+            const staged = manifest.content.scriptMounts ? stageScripts(manifest, entryDir) : null;
+            const entryFile = staged
+                ? resolveScriptEntry({ ...manifest, content: { ...manifest.content, scriptsDir: "." } }, staged)
                 : resolveScriptEntry(manifest, entryDir);
             if (entryFile) resolveMap.set(manifest.name, entryFile);
+            // content.scriptAliases: extra importable sub-entries, e.g. { "devtools": "openchara/devtools/index.js" } -> `<name>/devtools`.
+            for (const [alias, rel] of Object.entries(manifest.content.scriptAliases ?? {})) {
+                resolveMap.set(`${manifest.name}/${alias}`, path.resolve(staged ?? path.resolve(entryDir, manifest.content.scriptsDir), rel));
+            }
         }
         rootEntry = resolveMap.get(modManifest.name) ?? null;
     }
@@ -578,6 +586,7 @@ function buildMod(modDir, opts = {}) {
     for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
 
     const lintIssues = runEntityLints({ bp, rp });
+    layerOverSource([bp, rp]);
     injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
     if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
@@ -798,7 +807,8 @@ function createIncrementalBuild(modDir, opts = {}) {
         rp = new Map();
         for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
         const lintIssues = runEntityLints({ bp, rp });
-        injectPackStrings(plan.modManifest, [bp, rp]);
+        layerOverSource([bp, rp]);
+    injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
         if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
         assertNoLintIssues(plan.modManifest, lintIssues);
@@ -908,7 +918,8 @@ function createIncrementalBuild(modDir, opts = {}) {
                 return fullBuild();
             }
             case "manifestDsl": {
-                injectPackStrings(plan.modManifest, [bp, rp]);
+                layerOverSource([bp, rp]);
+    injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
                 break;
             }

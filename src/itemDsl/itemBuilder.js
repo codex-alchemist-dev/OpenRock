@@ -23,8 +23,8 @@ function buildItem(itemNode) {
     if (!itemNode || itemNode.tag !== "Item") {
         throw new Error(`Crystal Manifest-Item: a real *.item.tsx file must default-export a real <Item> node, got ${JSON.stringify(itemNode)}`);
     }
-    const { identifier, menuCategory } = itemNode.attrs;
-    const description = { identifier };
+    const { identifier, menuCategory, description: extraDescription } = itemNode.attrs;
+    const description = { identifier, ...(extraDescription ?? {}) };
     if (menuCategory) description.menu_category = menuCategory;
 
     const components = {};

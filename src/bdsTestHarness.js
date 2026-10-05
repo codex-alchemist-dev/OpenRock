@@ -347,7 +347,7 @@ function bootAndCollect(bdsDir, { timeoutMs = 15000, expectSmokeResults = false 
  *   network access should never trigger a real download mid-test).
  * @returns {Promise<{ok:boolean, errors:string[], packLoaded:boolean, rawOutput:string, bdsDir:string}>}
  */
-async function runSmokeTest(built, { bdsDir, openrockRoot = path.join(__dirname, ".."), timeoutMs = 15000, autoInstall = true } = {}) {
+async function runSmokeTest(built, { bdsDir, openrockRoot = path.join(__dirname, ".."), timeoutMs = Number(process.env.OPENROCK_BDS_TIMEOUT_MS) || 15000, autoInstall = true } = {}) {
     let dir;
     try {
         dir = await resolveOrInstallBdsInstance(bdsDir, openrockRoot, { autoInstall });

@@ -32,6 +32,7 @@ function validateManifest(manifest) {
         if (!dep || typeof dep !== "object") throw new Error(`manifest.dependsOn.${depName} must be an object`);
         if (!VALID_DEP_TYPES.includes(dep.type)) throw new Error(`manifest.dependsOn.${depName}.type must be one of ${VALID_DEP_TYPES.join("/")}, got ${JSON.stringify(dep.type)}`);
         if (dep.type === "submodule" && typeof dep.path !== "string") throw new Error(`manifest.dependsOn.${depName}: type "submodule" requires a "path"`);
+        if (dep.relativeTo !== undefined && dep.relativeTo !== "package") throw new Error(`manifest.dependsOn.${depName}: relativeTo must be "package" (resolve path against the depending package instead of vendor/)`);
         // versionRange (A1): an npm-style range, only meaningful for a
         // "library" dependency (a submodule dependency is pinned by git
         // commit, not a version string at all). Absent means "any version".
@@ -82,7 +83,7 @@ function validateManifest(manifest) {
     }
 
     if (manifest.kind === "library") {
-        if (typeof manifest.entry !== "string" || !manifest.entry) throw new Error(`library manifest "${manifest.name}" requires an "entry"`);
+        if (!manifest.content && (typeof manifest.entry !== "string" || !manifest.entry)) throw new Error(`library manifest "${manifest.name}" requires an "entry"`);
         // Whether a given dependsOn.library entry actually points at a
         // library (never a mod - mods are leaf packages, nothing can
         // legally depend on one) can only be checked once the full set of
@@ -138,6 +139,7 @@ function validateManifest(manifest) {
         for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "dslVarsProvider", "entityDsl", "manifestDsl", "blockDsl", "itemDsl", "cinemaDsl", "localization"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
+        if (c.scriptAliases !== undefined && (!c.scriptAliases || typeof c.scriptAliases !== "object" || Object.values(c.scriptAliases).some(v => typeof v !== "string"))) throw new Error(`manifest.content.scriptAliases must map alias names to script paths`);
         if (c.scriptMounts !== undefined) require("./scriptMounts.js").validateScriptMounts(c.scriptMounts, `manifest "${manifest.name}"`);
         if (c.generatedModules !== undefined) require("./generatedModules.js").validateGeneratedModules(c.generatedModules, `manifest "${manifest.name}"`);
         // entityDsl (Crystal Manifest-Entity, OR-Track M): a directory of

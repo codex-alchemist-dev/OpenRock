@@ -16,7 +16,7 @@ function raw(tag, attrs) {
 /** The whole item DSL file's top-level node. @param {object} props - identifier (required), menuCategory. */
 function Item(props) {
     if (!props.identifier) throw new Error("Crystal Manifest-Item: <Item> needs a real identifier");
-    return { tag: "Item", attrs: { identifier: props.identifier, menuCategory: props.menuCategory, formatVersion: props.formatVersion }, children: props.children ?? [], line: 0 };
+    return { tag: "Item", attrs: { identifier: props.identifier, menuCategory: props.menuCategory, formatVersion: props.formatVersion, description: props.description }, children: props.children ?? [], line: 0 };
 }
 
 function RawComponent(props) {

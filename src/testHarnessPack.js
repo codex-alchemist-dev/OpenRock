@@ -108,7 +108,16 @@ world.afterEvents.worldLoad.subscribe(() => {
     // and start ticking its chunks before anything tries to spawn/place
     // into them - confirmed necessary (immediate spawn attempts right after
     // the command still hit the same unloaded-chunk error).
-    system.runTimeout(() => {
+    const farCorner = { x: MAX_SPAN - SPACING, y: 5, z: MAX_SPAN - SPACING };
+    const chunksReady = () => { try { return Boolean(dimension.getBlock(farCorner)); } catch (e) { return false; } };
+    let waited = 0;
+    const wait = system.runInterval(() => {
+        waited += 10;
+        if (!chunksReady() && waited < 1200) return; // up to ~60s for a large ticking area to finish loading
+        system.clearRun(wait);
+        runAll();
+    }, 10);
+    function runAll() {
         let okCount = 0, failCount = 0;
 
         ENTITY_IDS.forEach((id, i) => {
@@ -126,7 +135,7 @@ world.afterEvents.worldLoad.subscribe(() => {
         });
 
         BLOCK_IDS.forEach((id, i) => {
-            const location = { x: i * SPACING, y: 5, z: SPACING * 2 + ENTITY_IDS.length * SPACING };
+            const location = { x: (i % 5) * SPACING, y: 5, z: SPACING * (1 + Math.floor(i / 5)) }; // packed into the spawn chunk(s): loaded for sure
             try {
                 const block = dimension.getBlock(location);
                 if (!block) throw new Error("getBlock returned no block (chunk not loaded?)");
@@ -146,7 +155,7 @@ world.afterEvents.worldLoad.subscribe(() => {
         });
 
         ITEM_IDS.forEach((id, i) => {
-            const location = { x: i * SPACING, y: 5, z: SPACING * 4 + (ENTITY_IDS.length + BLOCK_IDS.length) * SPACING };
+            const location = { x: (i % 5) * SPACING, y: 5, z: SPACING * (8 + Math.floor(i / 5)) % 15 }; // packed into the spawn chunk: loaded for sure
             try {
                 const stack = new ItemStack(id, 1);
                 const itemEntity = dimension.spawnItem(stack, location);
@@ -163,7 +172,7 @@ world.afterEvents.worldLoad.subscribe(() => {
         });
 
         console.warn(\`${MARKER_DONE} entities=\${ENTITY_IDS.length} blocks=\${BLOCK_IDS.length} items=\${ITEM_IDS.length} ok=\${okCount} fail=\${failCount}\`);
-    }, 20); // 20 ticks (~1 real second) for the ticking area to actually settle
+    }
 });
 `;
 }
