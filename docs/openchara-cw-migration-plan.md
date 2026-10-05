@@ -127,3 +127,9 @@ write one line under "Blockers/decisions" below. NEVER change persisted dynamic-
 ## Blockers / decisions log
 
 (append here; do not guess)
+
+- 2026-10-05 (Phase 1 done): `{{vars}}` now fill inside DSL-compiled JSON documents too, so library entity sources can author `identifier="{{ns}}:pathfind_anchor"`.
+- Phase 2 gaps found by reading the engine entities vs `src/entityDsl/components.js` (resolve in 2.1, [S]): `<Entity>` has no `runtimeIdentifier`
+  (`pathfind_anchor` uses `minecraft:armor_stand`) and no `formatVersion` (engine files use 1.16.0 / 1.21.10); no typed `DamageSensor`,
+  `Persistent`, `Inventory`, `Nameable`, `KnockbackResistance`, `ConditionalBandwidthOptimization` (use `<RawComponent>` initially). Client entity fields
+  (`materials/textures/geometry/renderControllers`) are supported on `<Entity>`. The semantic comparer must ignore key order only.

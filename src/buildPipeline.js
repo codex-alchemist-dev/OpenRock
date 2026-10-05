@@ -309,6 +309,12 @@ function putJson(map, outRel, obj) {
 // dispatches to the right real handling for each, so a texture Buffer
 // never gets accidentally run through JSON.stringify() (which would
 // mangle it into a {"type":"Buffer","data":[...]} object, not real bytes).
+/** {{vars}} inside a compiled JSON document (e.g. an entity identifier authored as "{{ns}}:x" in a library). Strings/Buffers pass through. */
+function fillDoc(doc, vars) {
+    if (!doc || typeof doc !== "object" || Buffer.isBuffer(doc)) return doc;
+    return JSON.parse(fill(JSON.stringify(doc), vars));
+}
+
 function putDirectoryDslEntry(map, outRel, value) {
     if (isMergedLangOutput(outRel) && map.has(outRel)) return put(map, outRel, mergeLangOutput(outRel, map.get(outRel), value));
     if (Buffer.isBuffer(value) || typeof value === "string") put(map, outRel, value);
@@ -454,8 +460,8 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
             if (!bp && !allowWithoutBehavior) continue;
             const dslDirAbs = path.resolve(entryDir, content[contentField]);
             const output = compile(dslDirAbs);
-            if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
-            if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), doc);
+            if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), fillDoc(doc, vars));
+            if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), fillDoc(doc, vars));
         }
     }
 }
@@ -894,8 +900,8 @@ function createIncrementalBuild(modDir, opts = {}) {
                 if (rp) for (const staleKey of previous.rp) if (!freshRpKeys.has(staleKey)) rp.delete(staleKey);
                 directoryDslOutputKeys.set(target.dirAbs, { bp: freshBpKeys, rp: freshRpKeys });
 
-                for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
-                if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), doc);
+                for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), fillDoc(doc, vars));
+                if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), fillDoc(doc, vars));
                 // Generated virtual script modules feed the bundle, so a
                 // change to one means the bundle itself must be re-rendered.
                 if ([...freshBpKeys, ...previous.bp].some(isVirtualKey)) {
