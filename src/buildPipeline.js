@@ -345,8 +345,19 @@ function assertNotNativeOnlyPath(manifestName, outRel) {
  * createIncrementalBuild()'s rebuild() (called for just the one entry that
  * owns a changed file).
  */
-function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi) {
-    const vars = { ns: manifest.namespace ?? "" };
+/**
+ * Template variables for `{{name}}` placeholders in a package's content. `ns` is the
+ * package's own namespace (falling back to the mod's, so a namespace-less library's
+ * templates land in the mod's namespace); every other variable comes from the ROOT mod's
+ * `templateVars`, so a library's templates (e.g. OpenChara's `{{char}}`) are filled
+ * with the consuming mod's values.
+ */
+function templateVarsFor(entryManifest, rootManifest) {
+    return { ...(rootManifest?.templateVars ?? {}), ns: entryManifest.namespace ?? rootManifest?.namespace ?? "" };
+}
+
+function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null) {
+    const vars = templateVarsFor(manifest, rootManifest);
     const content = manifest.content ?? {};
 
     for (const [field, map] of [["bpOverlayDir", bp], ["rpOverlayDir", rp]]) {
@@ -542,7 +553,7 @@ function buildMod(modDir, opts = {}) {
     const bp = plan.hasBehaviorPack ? new Map() : null;
     const rp = new Map();
 
-    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi);
+    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest);
 
     const lintIssues = runEntityLints({ bp, rp });
     renderManifestJson(plan, { bp, rp });
@@ -762,7 +773,7 @@ function createIncrementalBuild(modDir, opts = {}) {
         plan = resolveBuildPlan(modDir, opts);
         bp = plan.hasBehaviorPack ? new Map() : null;
         rp = new Map();
-        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi);
+        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest);
         const lintIssues = runEntityLints({ bp, rp });
         renderManifestJson(plan, { bp, rp });
         if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
@@ -777,7 +788,7 @@ function createIncrementalBuild(modDir, opts = {}) {
         directoryDslOutputKeys.clear();
         {
             for (const { manifest, dir: entryDir } of plan.ordered) {
-                const vars = { ns: manifest.namespace ?? "" };
+                const vars = templateVarsFor(manifest, plan.modManifest);
                 for (const { contentField, compile, allowWithoutBehavior } of DIRECTORY_DSLS) {
                     const dslRel = manifest.content?.[contentField];
                     if (!dslRel) continue;
@@ -804,7 +815,7 @@ function createIncrementalBuild(modDir, opts = {}) {
             case "overlay": {
                 const map = target.side === "bp" ? bp : rp;
                 if (!map) return fullBuild(); // shouldn't happen (bp overlay with no bp), but never guess
-                const vars = { ns: target.entry.manifest.namespace ?? "" };
+                const vars = templateVarsFor(target.entry.manifest, plan.modManifest);
                 const rel = path.relative(target.dirAbs, path.resolve(absChangedPath)).split(path.sep).join("/");
                 const outRel = fill(rel, vars);
                 assertNotNativeOnlyPath(target.entry.manifest.name, outRel);
@@ -830,7 +841,7 @@ function createIncrementalBuild(modDir, opts = {}) {
                 // compile() re-lists target.dirAbs itself, so an
                 // added/removed source file in this same directory is
                 // picked up for real too, not just an edit to an existing one.
-                const vars = { ns: target.entry.manifest.namespace ?? "" };
+                const vars = templateVarsFor(target.entry.manifest, plan.modManifest);
                 const output = target.compile(target.dirAbs);
                 const freshBpKeys = new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars)));
                 const freshRpKeys = new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars)));

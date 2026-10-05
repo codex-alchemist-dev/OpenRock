@@ -124,6 +124,14 @@ function validateManifest(manifest) {
     // library that DOES contribute real in-world assets (OR-Track K's
     // runtime addon is the deliberate example) can still declare it, same
     // as a mod would.
+    if (manifest.templateVars !== undefined) {
+        const tv = manifest.templateVars;
+        if (!tv || typeof tv !== "object" || Array.isArray(tv)) throw new Error(`manifest.templateVars must be an object of strings`);
+        for (const [k, v] of Object.entries(tv)) {
+            if (!/^\w+$/.test(k) || k === "ns") throw new Error(`manifest.templateVars: "${k}" is not a valid variable name ("ns" is reserved)`);
+            if (typeof v !== "string") throw new Error(`manifest.templateVars.${k} must be a string`);
+        }
+    }
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
