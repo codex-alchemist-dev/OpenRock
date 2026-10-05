@@ -35,7 +35,7 @@ test("discoverMods: finds every valid mod subdirectory, skips non-mod ones silen
 test("discoverMods: a hybrid library (kind:\"library\" with its own packs) counts as discoverable too (OR-Track K)", () => {
     const found = discoverMods(path.join(__dirname, "fixtures"));
     const names = found.map(f => f.manifest.name).sort();
-    assert.deepStrictEqual(names, ["api-import-mod", "build-mod", "datagen-mod", "datagen-mod-missing-entry", "datagen-mod-no-dep", "hybrid-library", "resource-only-mod", "script-entry-mod"]);
+    assert.deepStrictEqual(names, ["api-import-mod", "build-mod", "datagen-mod", "datagen-mod-missing-entry", "datagen-mod-no-dep", "hybrid-library", "resource-only-mod", "script-entry-mod", "ui-mod"]);
     // build-lib (an ordinary, non-hybrid library) and mods-dir (a folder of
     // manifests, not a manifest itself) are correctly excluded.
 });
