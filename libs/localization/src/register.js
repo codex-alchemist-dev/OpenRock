@@ -17,8 +17,9 @@ const project = require("./project.js");
 const providers = require("./providers.js");
 const prebuild = require("./prebuild.js");
 const runtime = require("./runtime.js");
+const glossary = require("./glossary.js");
 
-const api = { ...placeholders, ...langFile, ...catalog, ...extract, ...mtl, ...sheet, ...emit, ...project, ...providers, ...prebuild, ...runtime };
+const api = { ...placeholders, ...langFile, ...catalog, ...extract, ...mtl, ...sheet, ...emit, ...project, ...providers, ...prebuild, ...runtime, ...glossary };
 
 function register() {
     return { api };

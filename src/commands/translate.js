@@ -8,7 +8,7 @@ const path = require("path");
 const { loadManifestFile } = require("../manifest.js");
 const loc = require("../../libs/localization/src/register.js");
 
-const SUBCOMMANDS = ["extract", "status", "export", "import", "mtl", "check"];
+const SUBCOMMANDS = ["extract", "status", "export", "import", "mtl", "check", "glossary"];
 
 const flagValue = (flags, name) => flags.find(f => f.startsWith(`--${name}=`))?.slice(name.length + 3);
 
@@ -19,6 +19,10 @@ function openProject(modDir) {
     const project = loc.loadProject(path.resolve(dir, rel), dir);
     const langs = loc.collectLangs(project.catalog, project.config);
     return { manifest, project, langs };
+}
+
+function getGlossaryPath(project) {
+    return path.join(project.locDir, "glossary.json");
 }
 
 async function cmdTranslate(sub, modDir, flags = []) {
@@ -99,6 +103,55 @@ async function cmdTranslate(sub, modDir, flags = []) {
             report = { ok: problems.length === 0, problems };
             for (const p of problems) say(`${p.kind}${p.lang ? " [" + p.lang + "]" : ""}: ${p.keys ? p.keys.join(", ") : p.count}`);
             if (report.ok) say("localization check passed");
+            break;
+        }
+        case "glossary": {
+            const glossPath = getGlossaryPath(project);
+            const glossary = loc.loadGlossary(glossPath);
+            const act = flagValue(flags, "action") || "list";
+            const arg1 = flagValue(flags, "arg1");
+            const arg2 = flagValue(flags, "arg2");
+            const arg3 = flagValue(flags, "arg3");
+
+            switch (act) {
+                case "list":
+                    report = { ok: true, glossary };
+                    say(`do-not-translate terms: ${glossary.doNotTranslate.join(", ") || "(none)"}`);
+                    for (const [lang, terms] of Object.entries(glossary.terms)) {
+                        say(`${lang}: ${Object.entries(terms).map(([k, v]) => `${k}→${v}`).join(", ") || "(empty)"}`);
+                    }
+                    break;
+                case "add-term":
+                    if (!arg1) throw new Error("add-term requires a term");
+                    loc.addDoNotTranslate(glossary, arg1);
+                    loc.saveGlossary(glossPath, glossary);
+                    report = { ok: true };
+                    say(`added do-not-translate: ${arg1}`);
+                    break;
+                case "remove-term":
+                    if (!arg1) throw new Error("remove-term requires a term");
+                    loc.removeDoNotTranslate(glossary, arg1);
+                    loc.saveGlossary(glossPath, glossary);
+                    report = { ok: true };
+                    say(`removed do-not-translate: ${arg1}`);
+                    break;
+                case "set":
+                    if (!arg1 || !arg2 || !arg3) throw new Error("set requires language, original, and translation");
+                    loc.setForcedTerm(glossary, arg1, arg2, arg3);
+                    loc.saveGlossary(glossPath, glossary);
+                    report = { ok: true };
+                    say(`set forced term ${arg1}: ${arg2}→${arg3}`);
+                    break;
+                case "remove":
+                    if (!arg1 || !arg2) throw new Error("remove requires language and original");
+                    loc.removeForcedTerm(glossary, arg1, arg2);
+                    loc.saveGlossary(glossPath, glossary);
+                    report = { ok: true };
+                    say(`removed forced term ${arg1}: ${arg2}`);
+                    break;
+                default:
+                    throw new Error(`unknown glossary action: ${act}`);
+            }
             break;
         }
     }
