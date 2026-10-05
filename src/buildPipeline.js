@@ -402,7 +402,15 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
 
     // content.generatedModules: build-time Node providers of JS source -> @openrock/virtual/<name>.
     if (content.generatedModules && bp) {
-        for (const [name, src] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, templateVars: vars })) put(bp, `${VIRTUAL_PREFIX}${name}.js`, src);
+        for (const [name, out] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, templateVars: vars })) {
+            put(bp, `${VIRTUAL_PREFIX}${name}.js`, out.source);
+            for (const [map, files] of [[bp, out.bp], [rp, out.rp]]) {
+                for (const [outRel, data] of Object.entries(files)) {
+                    assertNotNativeOnlyPath(manifest.name, outRel);
+                    putMergingRegistries(map, outRel, data);
+                }
+            }
+        }
     }
 
     // content.datagenEntry (OR-Track B2, made real): a build-time-only Node

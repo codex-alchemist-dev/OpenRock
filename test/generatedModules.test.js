@@ -12,9 +12,10 @@ function test(name, fn) {
 }
 
 test("generatedModules: provider output is bundled into main.js with ctx (namespace, templateVars, readJsonTable)", () => {
-    const { bp } = buildMod(path.join(__dirname, "fixtures", "gen-mod"), { vendorDir: path.join(__dirname, "fixtures") });
+    const { bp, rp } = buildMod(path.join(__dirname, "fixtures", "gen-mod"), { vendorDir: path.join(__dirname, "fixtures") });
     const main = bp.get("scripts/main.js").toString();
     assert.ok(/"ns": "gm"/.test(main) && /"char": "waifu"/.test(main) && /"rows": \["a"\]/.test(main), main.slice(0, 400));
+    assert.strictEqual(rp.get("textures/generated/gen.txt").toString(), "from provider");
     assert.ok(![...bp.keys()].some(k => k.includes(".openrock-virtual")));
 });
 test("generatedModules: validation", () => {

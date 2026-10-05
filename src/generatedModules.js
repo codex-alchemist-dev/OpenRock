@@ -1,7 +1,9 @@
 // content.generatedModules: [{ "name": "openchara-content", "from": "src/build/content.js" }]
 // `from` is a build-time Node file exporting (ctx) => string (JS source). The source becomes the
 // virtual script module @openrock/virtual/<name> (see virtualModules.js) - never a loose file.
-// ctx = { manifest, mod, dir, templateVars, readJsonTable(dirRel) }
+// ctx = { manifest, mod, dir, templateVars, readJsonTable(dirAbs), walk(dirAbs) }
+// A provider may instead return { source, rp?: {relPath: Buffer|string}, bp?: {...} } to also contribute files
+// (e.g. generated portraits); those pass the same native-only path guard as overlay files.
 "use strict";
 
 const fs = require("fs");
@@ -40,7 +42,7 @@ function validateGeneratedModules(list, where) {
     }
 }
 
-/** @returns {Map<string, string>} name -> JS source */
+/** @returns {Map<string, {source: string, rp: object, bp: object}>} name -> output */
 function renderGeneratedModules(manifest, entryDir, { mod, templateVars }) {
     const out = new Map();
     for (const { name, from } of manifest.content?.generatedModules ?? []) {
@@ -49,11 +51,12 @@ function renderGeneratedModules(manifest, entryDir, { mod, templateVars }) {
         let fn;
         try { fn = require(abs); } catch (e) { throw new Error(`"${manifest.name}": generated module "${name}": "${from}" failed to load: ${e.message}`); }
         if (typeof fn !== "function") throw new Error(`"${manifest.name}": generated module "${name}": "${from}" must export (ctx) => string`);
-        const src = fn({ manifest, mod, dir: entryDir, templateVars, readJsonTable });
-        if (typeof src !== "string") throw new Error(`"${manifest.name}": generated module "${name}" must return a string of JS source`);
-        out.set(name, src);
+        const res = fn({ manifest, mod, dir: entryDir, templateVars, readJsonTable, walk });
+        const o = typeof res === "string" ? { source: res } : res;
+        if (!o || typeof o.source !== "string") throw new Error(`"${manifest.name}": generated module "${name}" must return a string of JS source or { source, rp?, bp? }`);
+        out.set(name, { source: o.source, rp: o.rp ?? {}, bp: o.bp ?? {} });
     }
     return out;
 }
 
-module.exports = { renderGeneratedModules, validateGeneratedModules, readJsonTable };
+module.exports = { renderGeneratedModules, validateGeneratedModules, readJsonTable, walk };
