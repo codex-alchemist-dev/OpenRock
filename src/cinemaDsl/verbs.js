@@ -67,6 +67,15 @@ registerVerb("title", { pos: [req("str")], kw: { subtitle: "str", for: "dur", fa
 registerVerb("call", { pos: [req("str")], doc: "invoke a registered script function by name" });
 registerVerb("emit", { pos: [req("str")], doc: "emit a named script event" });
 registerVerb("mark_seen", { pos: [req("str")], doc: "mark a cutscene id as seen for the player" });
+registerVerb("camera dolly", { kw: { by: req("coord"), over: req("dur") }, durationKw: "over" });
+registerVerb("camera roll", { pos: [req("num")], kw: { over: "dur", ease }, durationKw: "over" });
+registerVerb("weather", { pos: [{ type: "ident", enum: ["clear", "rain", "thunder"], required: true }] });
+registerVerb("time", { pos: [req("num")] });
+registerVerb("clear_effects", {});
+registerVerb("give_effect", { pos: [req("str")], kw: { for: "dur", level: "num" }, durationKw: "for" });
+registerVerb("teleport_player", { pos: [req("coord")] });
+registerVerb("heal", {});
+registerVerb("set_flag", { pos: [req("str")] });
 
 registerVerb("actor play", { actor: true, pos: [req("str")], kw: { loop: "flag" } });
 registerVerb("actor say", { actor: true, pos: [req("str")], kw: { for: "dur" }, durationKw: "for" });

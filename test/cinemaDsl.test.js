@@ -152,4 +152,29 @@ test("end-to-end: a mod with content.cinemaDsl bundles cutscenes into scripts/ma
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
+test("new verbs: camera dolly/roll, weather, time, clear_effects, give_effect, teleport_player, heal, set_flag parse and compile", () => {
+    const c = one(wrap(`lock cinematic
+camera dolly by (1, 2, 3) over 5s
+camera roll 45 over 2s ease linear
+weather rain
+time 18000
+clear_effects
+give_effect "wither" for 10s level 2
+teleport_player (0, 64, 0)
+heal
+set_flag "boss_defeated"
+unlock`));
+    const opNames = c.events.map(e => e.op.split(".")[0] || e.op);
+    assert.ok(opNames.includes("camera"), "camera commands grouped");
+    assert.ok(opNames.includes("weather"));
+    assert.ok(opNames.includes("time"));
+    assert.ok(opNames.includes("clear_effects"));
+    assert.ok(opNames.includes("give_effect"));
+    assert.ok(opNames.includes("teleport_player"));
+    assert.ok(opNames.includes("heal"));
+    assert.ok(opNames.includes("set_flag"));
+    assert.ok(c.events.find(e => e.op === "camera.dolly")?.args.by);
+    assert.ok(c.events.find(e => e.op === "camera.roll")?.args.pos[0]);
+});
+
 console.log(`\n${passed} passed`);
