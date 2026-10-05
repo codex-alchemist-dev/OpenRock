@@ -7,7 +7,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { createIncrementalBuild, discoverMods, isBuildablePackage } = require("../buildPipeline.js");
+const { createIncrementalBuild, discoverMods, isBuildablePackage, resolveBuildPlan } = require("../buildPipeline.js");
 const { resolveManifestSet } = require("../resolver.js");
 const { loadManifestFile } = require("../manifest.js");
 const { stamp, buildOpts } = require("./shared.js");
@@ -58,12 +58,25 @@ function watchAndDeploy(modDir, openrockRoot, { onError = e => console.error(`[$
         if (again) { again = false; schedule(); }
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
-    fs.watch(modDir, { recursive: true }, (evt, file) => {
+    const watchDir = dir => fs.watch(dir, { recursive: true }, (evt, file) => {
         if (!file) { forceFull = true; schedule(); return; } // some platforms don't report a filename at all - can't classify it, so play it safe with a real full rebuild
         if (/(^|[\\/])(\.git|node_modules|build|dist|\.(entity|manifest|block|item|cinema)-dsl-dist)([\\/]|$)/.test(file)) return;
-        pendingFiles.push(path.join(modDir, file));
+        pendingFiles.push(path.join(dir, file));
         schedule();
     });
+    watchDir(modDir);
+    // Sibling-checkout dependencies (e.g. ../OpenChara, ../MinUI) and script-mount sources are edited alongside the mod: watch them too.
+    try {
+        const plan = resolveBuildPlan(modDir, buildOpts(modDir, openrockRoot));
+        const bundled = path.resolve(openrockRoot, "libs");
+        const isOutside = d => !path.resolve(d).startsWith(path.resolve(modDir)) && !path.resolve(d).startsWith(bundled);
+        const outside = new Set();
+        for (const { manifest, dir } of plan.ordered) {
+            if (isOutside(dir)) outside.add(path.resolve(dir));
+            for (const m of manifest.content?.scriptMounts ?? []) { const d = path.resolve(dir, m.from); if (isOutside(d)) outside.add(d); }
+        }
+        for (const d of outside) if (fs.existsSync(d)) watchDir(d);
+    } catch { /* plan errors surface from the build itself */ }
     setInterval(() => { forceFull = true; schedule(); }, 30000); // safety net - see comment above
     return {
         schedule,

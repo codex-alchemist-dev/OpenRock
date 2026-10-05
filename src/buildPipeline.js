@@ -76,7 +76,7 @@ const { formatEsbuildFailure } = require("./buildDiagnostics.js");
 const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey, VIRTUAL_PREFIX } = require("./virtualModules.js");
 const { computeVars, fill, fillDoc } = require("./dslVars.js");
 const { stageScripts } = require("./scriptMounts.js");
-const { renderUiDir } = require("./uiStage.js");
+const { renderUiDir, lintUi } = require("./uiStage.js");
 const { renderGeneratedModules } = require("./generatedModules.js");
 const { isMergedLangOutput, mergeLangOutput, injectPackStrings, layerOverSource } = require("./packLang.js");
 
@@ -270,6 +270,7 @@ function resolveBuildPlan(modDir, { vendorDir, libraryDirs = {} } = {}) {
 
     let resolveMap = null;
     let rootEntry = null;
+    const scriptRoots = []; // [{ name, root }] - each package's real (or staged) scripts directory
     if (hasBehaviorPack) {
         resolveMap = new Map();
         // OR-Track N: every collected package that declares a real
@@ -287,6 +288,7 @@ function resolveBuildPlan(modDir, { vendorDir, libraryDirs = {} } = {}) {
                 ? resolveScriptEntry({ ...manifest, content: { ...manifest.content, scriptsDir: "." } }, staged)
                 : resolveScriptEntry(manifest, entryDir);
             if (entryFile) resolveMap.set(manifest.name, entryFile);
+            scriptRoots.push({ name: manifest.name, root: staged ?? path.resolve(entryDir, manifest.content.scriptsDir) });
             // content.scriptAliases: extra importable sub-entries, e.g. { "devtools": "openchara/devtools/index.js" } -> `<name>/devtools`.
             for (const [alias, rel] of Object.entries(manifest.content.scriptAliases ?? {})) {
                 resolveMap.set(`${manifest.name}/${alias}`, path.resolve(staged ?? path.resolve(entryDir, manifest.content.scriptsDir), rel));
@@ -295,7 +297,7 @@ function resolveBuildPlan(modDir, { vendorDir, libraryDirs = {} } = {}) {
         rootEntry = resolveMap.get(modManifest.name) ?? null;
     }
 
-    return { modManifest, dir, hasBehaviorPack, ordered, scriptEntries, resolveMap, rootEntry, datagenApi };
+    return { modManifest, dir, hasBehaviorPack, ordered, scriptEntries, scriptRoots, resolveMap, rootEntry, datagenApi };
 }
 
 /**
@@ -540,6 +542,7 @@ function runEntityLints({ bp, rp }) {
             try { clientEntityDocs.push([rel, JSON.parse(buf.toString("utf8"))]); } catch { /* not real JSON - skip */ }
         }
     }
+    lintIssues.push(...lintUi(rp));
     for (const [rel, doc] of clientEntityDocs) {
         lintIssues.push(...lintClientEntityDoc(doc, rel));
         lintIssues.push(...lintRenderControllerReferences(doc, rcDocs, rel));
@@ -935,5 +938,5 @@ function createIncrementalBuild(modDir, opts = {}) {
 
 module.exports = {
     buildMod, collectEntries, resolveBundledLibraryDirs, discoverMods, isBuildablePackage, writeTree,
-    createIncrementalBuild, resolveBuildPlan, classifyChange,
+    createIncrementalBuild, resolveBuildPlan, classifyChange, renderEntryContent,
 };

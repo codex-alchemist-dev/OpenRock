@@ -26,4 +26,16 @@ function renderUiDir(uiDirAbs) {
     return compileUi(files);
 }
 
-module.exports = { renderUiDir };
+/** MinUI's JSON UI lint (silent-failure footguns like colliding collection_index slots) over a resource-pack map. */
+function lintUi(rpMap) {
+    const lint = path.join(__dirname, "..", "vendor", "minui", "lib", "lintjsonui.js");
+    if (!fs.existsSync(lint) || ![...rpMap.keys()].some(k => k.startsWith("ui/") && k.endsWith(".json"))) return [];
+    const issues = require(lint).lintJsonUi(rpMap, "RP");
+    if (process.env.OPENROCK_UI_LINT === "warn") {
+        for (const i of issues) console.warn(`[openrock] UI lint (warning only): ${i}`);
+        return [];
+    }
+    return issues;
+}
+
+module.exports = { renderUiDir, lintUi };

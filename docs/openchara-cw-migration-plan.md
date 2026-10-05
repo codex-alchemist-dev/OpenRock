@@ -133,3 +133,21 @@ write one line under "Blockers/decisions" below. NEVER change persisted dynamic-
   (`pathfind_anchor` uses `minecraft:armor_stand`) and no `formatVersion` (engine files use 1.16.0 / 1.21.10); no typed `DamageSensor`,
   `Persistent`, `Inventory`, `Nameable`, `KnockbackResistance`, `ConditionalBandwidthOptimization` (use `<RawComponent>` initially). Client entity fields
   (`materials/textures/geometry/renderControllers`) are supported on `<Entity>`. The semantic comparer must ignore key order only.
+
+## STATUS 2026-10-05 (end of session)
+
+- Phases 1-4 and 6 DONE. `openrock build|check` of Claude Waifus matches the legacy build file-for-file (entities, items, UI, portraits, render controller,
+  languages) except: `scripts/**` (esbuild bundle; BDS smoke boot passes, `tests/ui-smoke.mjs` + `tests/split-compat.mjs` pass against the new layout via
+  `OpenRock/src/looseScripts.js`) and `items/migration_charm.json` (modernized from legacy format 1.16.0 + `category:"equipment"` + a stray RP item to
+  format 1.21.10 + `menu_category`; the item has no icon texture, so verify in-game).
+- Legacy `tools/openchara.js` + `tools/lib/{build,check,zip}.js` deleted (git history keeps them). Parity baseline: `Claude Waifus/migration/cw-baseline.json`.
+- Phase 5 decision (reviewed, NOT migrated - none are drop-in): `itemSerializer.js` vs `@openrock/inventory-serialization` persist DIFFERENT formats
+  (`damage`/`nameTag` vs `durability{}`/`name`) and the engine's is a superset (nested containers, dyes, potions, dynamic props) - swapping would corrupt saved
+  records. `floodFill/chokePoints/routeAnalysis/roomSafety` take a `dimension` and return arrays; `@openrock/terrain|route-analysis` take an `isPassable`
+  callback and return Sets. `perception.js` (squad-keyed threat memory/aggro) vs `@openrock/perception` (`createThreatMemory`), `formations.js`
+  (named formation geometry) vs `@openrock/formation` (slot descriptors), `navigation.js` (`navigateToCoordinate(entity,x,y,z,dimension,cb)`) vs
+  `@openrock/pathfinding` (`navigateToCoordinate(pool, entity, target, dimension, hooks)`), `events.js`/`hooks.js` vs `@openrock/events` (Bedrock pub/sub) are all
+  different shapes. The right direction is the reverse: promote the engine's richer implementations into the libs behind adapters, with an in-game check.
+- Known, pre-existing: `openrock check` on CW fails the MinUI JSON UI lint (`collection_index collision`, spike screens `_skilltreespike`/`_tabspike` are the
+  likely cause) exactly as the legacy `check` did. `OPENROCK_UI_LINT=warn` downgrades it to warnings so you can deploy while fixing.
+- Needs the user in-game: deploy with `OPENROCK_UI_LINT=warn npm run dev` in Claude Waifus, confirm characters spawn/UI opens/lang switch/items.
