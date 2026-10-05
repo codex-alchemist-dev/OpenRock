@@ -59,18 +59,19 @@ const cmdLog = require("../src/commands/log.js");
 const cmdDebug = require("../src/commands/debug.js");
 const cmdInfo = require("../src/commands/info.js");
 const { cmdTranslate } = require("../src/commands/translate.js");
+const { cmdCinema } = require("../src/commands/cinema.js");
 const { runPrebuild } = require("../src/commands/shared.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
-const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info", "translate"];
+const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info", "translate", "cinema"];
 
 async function main() {
     const args = process.argv.slice(2);
     const flags = args.filter(a => a.startsWith("--"));
     const positional = args.filter(a => !a.startsWith("--"));
     const [cmd] = positional;
-    // `openrock translate <sub> [modDir]` takes a subcommand before the directory.
-    const dirArg = cmd === "translate" ? positional[2] : positional[1];
+    // `openrock translate <sub> [modDir]` and `openrock cinema <sub> [modDir]` take a subcommand before the directory.
+    const dirArg = ["translate", "cinema"].includes(cmd) ? positional[2] : positional[1];
     const modDir = path.resolve(dirArg ?? ".");
     try {
         if (["build", "check", "export", "deploy", "dev"].includes(cmd)) await runPrebuild(modDir, OPENROCK_ROOT);
@@ -84,6 +85,7 @@ async function main() {
             case "debug": cmdDebug(modDir, flags, OPENROCK_ROOT); break;
             case "info": cmdInfo(modDir, flags, OPENROCK_ROOT); break;
             case "translate": await cmdTranslate(positional[1], modDir, flags); break;
+            case "cinema": await cmdCinema(positional[1], modDir, flags); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);
                 process.exitCode = cmd ? 1 : 0;
