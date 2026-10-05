@@ -16,8 +16,9 @@ const emit = require("./emit.js");
 const project = require("./project.js");
 const providers = require("./providers.js");
 const prebuild = require("./prebuild.js");
+const runtime = require("./runtime.js");
 
-const api = { ...placeholders, ...langFile, ...catalog, ...extract, ...mtl, ...sheet, ...emit, ...project, ...providers, ...prebuild };
+const api = { ...placeholders, ...langFile, ...catalog, ...extract, ...mtl, ...sheet, ...emit, ...project, ...providers, ...prebuild, ...runtime };
 
 function register() {
     return { api };
