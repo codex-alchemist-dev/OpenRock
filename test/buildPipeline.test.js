@@ -269,4 +269,13 @@ test("buildMod: a real unresolvable script import produces the intricate build-d
     }
 });
 
+test("collectEntries: a submodule dep that exists but has no OpenRock manifest (plain code like vendor/mclite) is skipped, so libs depending on capabilities/i18n resolve", () => {
+    const { collectEntries } = require("../src/buildPipeline.js");
+    const { loadManifestFile } = require("../src/manifest.js");
+    const root = path.join(__dirname, "..");
+    const { manifest, dir } = loadManifestFile(path.join(root, "libs", "i18n"));
+    const names = collectEntries(manifest, dir, { vendorDir: root, libraryDirs: resolveBundledLibraryDirs(root) }).map(e => e.manifest.name);
+    assert.deepStrictEqual(names, ["@openrock/i18n", "@openrock/capabilities"]);
+});
+
 Promise.all(asyncTests).then(() => console.log(`\n${passed} passed`));

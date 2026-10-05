@@ -116,6 +116,10 @@ const DIRECTORY_DSLS = [
     { contentField: "localization", compile: compileLocalization, allowWithoutBehavior: true },
 ];
 
+function hasManifestFile(dir) {
+    return ["openrock.mod.json", "openrock.library.json"].some(f => fs.existsSync(path.join(dir, f)));
+}
+
 /**
  * Walks `rootManifest`'s full dependency tree (submodule deps resolved via
  * `vendorDir`; "library"-type deps resolved via the caller-supplied
@@ -145,6 +149,10 @@ function collectEntries(rootManifest, rootDir, { vendorDir, libraryDirs = {} } =
                     throw new Error(`"${manifest.name}" depends on library "${depName}", but no directory for it was given (pass it in libraryDirs)`);
                 }
             }
+            // A submodule that exists but has no OpenRock manifest is plain code
+            // (e.g. vendor/mclite, required directly by the libraries that use it),
+            // not a package with assets/scripts to merge - nothing to collect.
+            if (dep.type === "submodule" && fs.existsSync(depDir) && !hasManifestFile(depDir)) continue;
             const depEntry = loadManifestFile(depDir);
             visit(depEntry.manifest, depEntry.dir);
         }
