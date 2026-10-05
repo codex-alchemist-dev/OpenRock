@@ -75,6 +75,7 @@ const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
 const { formatEsbuildFailure } = require("./buildDiagnostics.js");
 const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey, VIRTUAL_PREFIX } = require("./virtualModules.js");
 const { computeVars, fill, fillDoc } = require("./dslVars.js");
+const { stageScripts } = require("./scriptMounts.js");
 const { renderUiDir } = require("./uiStage.js");
 const { renderGeneratedModules } = require("./generatedModules.js");
 const { isMergedLangOutput, mergeLangOutput, injectPackStrings } = require("./packLang.js");
@@ -278,7 +279,9 @@ function resolveBuildPlan(modDir, { vendorDir, libraryDirs = {} } = {}) {
         // A real content.scriptsDir entry overrides the provides.api alias
         // above for its own package name - resolved second, deliberately.
         for (const { manifest, dir: entryDir } of scriptEntries) {
-            const entryFile = resolveScriptEntry(manifest, entryDir);
+            const entryFile = manifest.content.scriptMounts
+                ? resolveScriptEntry({ ...manifest, content: { ...manifest.content, scriptsDir: "." } }, stageScripts(manifest, entryDir))
+                : resolveScriptEntry(manifest, entryDir);
             if (entryFile) resolveMap.set(manifest.name, entryFile);
         }
         rootEntry = resolveMap.get(modManifest.name) ?? null;
@@ -357,8 +360,8 @@ function assertNotNativeOnlyPath(manifestName, outRel) {
  * createIncrementalBuild()'s rebuild() (called for just the one entry that
  * owns a changed file).
  */
-function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null) {
-    const vars = computeVars(manifest, entryDir, rootManifest);
+function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null, rootDir = null) {
+    const vars = computeVars(manifest, entryDir, rootManifest, rootDir);
     const content = manifest.content ?? {};
 
     for (const [field, map] of [["bpOverlayDir", bp], ["rpOverlayDir", rp]]) {
@@ -388,7 +391,7 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
 
     // content.generatedModules: build-time Node providers of JS source -> @openrock/virtual/<name>.
     if (content.generatedModules && bp) {
-        for (const [name, out] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, templateVars: vars })) {
+        for (const [name, out] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, modDir: rootDir, templateVars: vars })) {
             put(bp, `${VIRTUAL_PREFIX}${name}.js`, out.source);
             for (const [map, files] of [[bp, out.bp], [rp, out.rp]]) {
                 for (const [outRel, data] of Object.entries(files)) {
@@ -572,7 +575,7 @@ function buildMod(modDir, opts = {}) {
     const bp = plan.hasBehaviorPack ? new Map() : null;
     const rp = new Map();
 
-    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest);
+    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
 
     const lintIssues = runEntityLints({ bp, rp });
     injectPackStrings(plan.modManifest, [bp, rp]);
@@ -793,7 +796,7 @@ function createIncrementalBuild(modDir, opts = {}) {
         plan = resolveBuildPlan(modDir, opts);
         bp = plan.hasBehaviorPack ? new Map() : null;
         rp = new Map();
-        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest);
+        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
         const lintIssues = runEntityLints({ bp, rp });
         injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
@@ -809,7 +812,7 @@ function createIncrementalBuild(modDir, opts = {}) {
         directoryDslOutputKeys.clear();
         {
             for (const { manifest, dir: entryDir } of plan.ordered) {
-                const vars = computeVars(manifest, entryDir, plan.modManifest);
+                const vars = computeVars(manifest, entryDir, plan.modManifest, plan.dir);
                 for (const { contentField, compile, allowWithoutBehavior } of DIRECTORY_DSLS) {
                     const dslRel = manifest.content?.[contentField];
                     if (!dslRel) continue;
@@ -836,7 +839,7 @@ function createIncrementalBuild(modDir, opts = {}) {
             case "overlay": {
                 const map = target.side === "bp" ? bp : rp;
                 if (!map) return fullBuild(); // shouldn't happen (bp overlay with no bp), but never guess
-                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest);
+                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest, plan.dir);
                 const rel = path.relative(target.dirAbs, path.resolve(absChangedPath)).split(path.sep).join("/");
                 const outRel = fill(rel, vars);
                 assertNotNativeOnlyPath(target.entry.manifest.name, outRel);
@@ -862,7 +865,7 @@ function createIncrementalBuild(modDir, opts = {}) {
                 // compile() re-lists target.dirAbs itself, so an
                 // added/removed source file in this same directory is
                 // picked up for real too, not just an edit to an existing one.
-                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest);
+                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest, plan.dir);
                 const output = target.compile(target.dirAbs, { vars });
                 const freshBpKeys = new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars)));
                 const freshRpKeys = new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars)));

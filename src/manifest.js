@@ -138,6 +138,7 @@ function validateManifest(manifest) {
         for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "dslVarsProvider", "entityDsl", "manifestDsl", "blockDsl", "itemDsl", "cinemaDsl", "localization"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
+        if (c.scriptMounts !== undefined) require("./scriptMounts.js").validateScriptMounts(c.scriptMounts, `manifest "${manifest.name}"`);
         if (c.generatedModules !== undefined) require("./generatedModules.js").validateGeneratedModules(c.generatedModules, `manifest "${manifest.name}"`);
         // entityDsl (Crystal Manifest-Entity, OR-Track M): a directory of
         // real *.entity.tsx files, compiled via

@@ -41,7 +41,7 @@ class EntityBuilder {
     }
 
     /** @returns {object} the real, final `minecraft:entity` (BP) document. */
-    toJSON(identifier, { spawnable = false, summonable = true, experimental = false, runtimeIdentifier, formatVersion = "1.20.0" } = {}) {
+    toJSON(identifier, { spawnable = false, summonable = true, experimental = false, runtimeIdentifier, formatVersion = "1.20.0", properties } = {}) {
         const components = { ...this.components };
         if (this.environmentSensorTriggers.length > 0) {
             components["minecraft:environment_sensor"] = { triggers: this.environmentSensorTriggers };
@@ -55,6 +55,7 @@ class EntityBuilder {
                     is_spawnable: spawnable,
                     is_summonable: summonable,
                     is_experimental: experimental,
+                    ...(properties ? { properties } : {}),
                 },
                 components,
             },
@@ -109,6 +110,10 @@ const TAG_HANDLERS = {
         const groupSink = new ComponentGroupSink();
         for (const child of node.children) emitNode(child, groupSink);
         sink.addComponentGroup(node.attrs.name, groupSink.components);
+    },
+
+    Event(node, sink) {
+        sink.addEvent(node.attrs.name, node.attrs.definition);
     },
 
     RawComponent(node, sink) {

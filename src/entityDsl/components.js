@@ -59,6 +59,8 @@ function Entity(props) {
             formatVersion: props.formatVersion,
             clientFormatVersion: props.clientFormatVersion,
             runtimeIdentifier: props.runtimeIdentifier,
+            // Synced/server entity properties (description.properties), passed through verbatim.
+            properties: props.properties,
         },
         children: props.children ?? [],
         line: 0,
@@ -69,6 +71,13 @@ function Entity(props) {
 function ComponentGroup(props) {
     requireString(props.name, "<ComponentGroup name>");
     return { tag: "ComponentGroup", attrs: { name: props.name }, children: props.children ?? [], line: 0 };
+}
+
+/** A real Bedrock entity event (e.g. add/remove component_groups), declared at the <Entity> root. */
+function Event(props) {
+    requireString(props.name, "<Event name>");
+    if (!props.definition || typeof props.definition !== "object") throw new Error(`OpenRock entity DSL: <Event name="${props.name}"> requires a real "definition" object`);
+    return { tag: "Event", attrs: { name: props.name, definition: props.definition }, children: [], line: 0 };
 }
 
 /**
@@ -153,7 +162,7 @@ function vars() { return globalThis.__openrockDslVars ?? {}; }
 
 module.exports = {
     vars,
-    Entity, ComponentGroup, RawComponent,
+    Entity, ComponentGroup, Event, RawComponent,
     Health, Movement, CollisionBox, NavigationWalk, Physics, Pushable, TypeFamily, Scale,
     Pathfinding,
 };

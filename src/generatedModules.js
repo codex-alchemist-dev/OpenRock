@@ -1,7 +1,7 @@
 // content.generatedModules: [{ "name": "openchara-content", "from": "src/build/content.js" }]
 // `from` is a build-time Node file exporting (ctx) => string (JS source). The source becomes the
 // virtual script module @openrock/virtual/<name> (see virtualModules.js) - never a loose file.
-// ctx = { manifest, mod, dir, templateVars, readJsonTable(dirAbs), walk(dirAbs) }
+// ctx = { manifest, mod, modDir (root mod directory), dir, templateVars, readJsonTable(dirAbs), walk(dirAbs) }
 // A provider may instead return { source, rp?: {relPath: Buffer|string}, bp?: {...} } to also contribute files
 // (e.g. generated portraits); those pass the same native-only path guard as overlay files.
 "use strict";
@@ -43,7 +43,7 @@ function validateGeneratedModules(list, where) {
 }
 
 /** @returns {Map<string, {source: string, rp: object, bp: object}>} name -> output */
-function renderGeneratedModules(manifest, entryDir, { mod, templateVars }) {
+function renderGeneratedModules(manifest, entryDir, { mod, modDir, templateVars }) {
     const out = new Map();
     for (const { name, from } of manifest.content?.generatedModules ?? []) {
         const abs = path.resolve(entryDir, from);
@@ -51,7 +51,7 @@ function renderGeneratedModules(manifest, entryDir, { mod, templateVars }) {
         let fn;
         try { fn = require(abs); } catch (e) { throw new Error(`"${manifest.name}": generated module "${name}": "${from}" failed to load: ${e.message}`); }
         if (typeof fn !== "function") throw new Error(`"${manifest.name}": generated module "${name}": "${from}" must export (ctx) => string`);
-        const res = fn({ manifest, mod, dir: entryDir, templateVars, readJsonTable, walk });
+        const res = fn({ manifest, mod, modDir, dir: entryDir, templateVars, readJsonTable, walk });
         const o = typeof res === "string" ? { source: res } : res;
         if (!o || typeof o.source !== "string") throw new Error(`"${manifest.name}": generated module "${name}" must return a string of JS source or { source, rp?, bp? }`);
         out.set(name, { source: o.source, rp: o.rp ?? {}, bp: o.bp ?? {} });
