@@ -76,6 +76,7 @@ const { formatEsbuildFailure } = require("./buildDiagnostics.js");
 const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey, VIRTUAL_PREFIX } = require("./virtualModules.js");
 const { renderUiDir } = require("./uiStage.js");
 const { renderGeneratedModules } = require("./generatedModules.js");
+const { isMergedLangOutput, mergeLangOutput, injectPackStrings } = require("./packLang.js");
 
 const TEXT_EXT = new Set([".json", ".lang", ".js", ".md", ".txt", ".mcfunction"]);
 
@@ -309,6 +310,7 @@ function putJson(map, outRel, obj) {
 // never gets accidentally run through JSON.stringify() (which would
 // mangle it into a {"type":"Buffer","data":[...]} object, not real bytes).
 function putDirectoryDslEntry(map, outRel, value) {
+    if (isMergedLangOutput(outRel) && map.has(outRel)) return put(map, outRel, mergeLangOutput(outRel, map.get(outRel), value));
     if (Buffer.isBuffer(value) || typeof value === "string") put(map, outRel, value);
     else putJson(map, outRel, value);
 }
@@ -579,6 +581,7 @@ function buildMod(modDir, opts = {}) {
     for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest);
 
     const lintIssues = runEntityLints({ bp, rp });
+    injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
     if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
 
@@ -798,7 +801,8 @@ function createIncrementalBuild(modDir, opts = {}) {
         rp = new Map();
         for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest);
         const lintIssues = runEntityLints({ bp, rp });
-        renderManifestJson(plan, { bp, rp });
+        injectPackStrings(plan.modManifest, [bp, rp]);
+    renderManifestJson(plan, { bp, rp });
         if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
         assertNoLintIssues(plan.modManifest, lintIssues);
         lastWasFullBuild = true;
@@ -907,7 +911,8 @@ function createIncrementalBuild(modDir, opts = {}) {
                 return fullBuild();
             }
             case "manifestDsl": {
-                renderManifestJson(plan, { bp, rp });
+                injectPackStrings(plan.modManifest, [bp, rp]);
+    renderManifestJson(plan, { bp, rp });
                 break;
             }
         }
