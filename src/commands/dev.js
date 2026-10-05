@@ -60,7 +60,7 @@ function watchAndDeploy(modDir, openrockRoot, { onError = e => console.error(`[$
     const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
     fs.watch(modDir, { recursive: true }, (evt, file) => {
         if (!file) { forceFull = true; schedule(); return; } // some platforms don't report a filename at all - can't classify it, so play it safe with a real full rebuild
-        if (/(^|[\\/])(\.git|node_modules|build|dist|\.(entity|manifest)-dsl-dist)([\\/]|$)/.test(file)) return;
+        if (/(^|[\\/])(\.git|node_modules|build|dist|\.(entity|manifest|block|item|cinema)-dsl-dist)([\\/]|$)/.test(file)) return;
         pendingFiles.push(path.join(modDir, file));
         schedule();
     });

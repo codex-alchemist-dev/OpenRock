@@ -57,9 +57,10 @@ const cmdDeploy = require("../src/commands/deploy.js");
 const cmdDev = require("../src/commands/dev.js");
 const cmdLog = require("../src/commands/log.js");
 const cmdDebug = require("../src/commands/debug.js");
+const cmdInfo = require("../src/commands/info.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
-const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug"];
+const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info"];
 
 async function main() {
     const args = process.argv.slice(2);
@@ -75,6 +76,7 @@ async function main() {
             case "dev": cmdDev(modDir, OPENROCK_ROOT); break;
             case "log": cmdLog(modDir, flags); break;
             case "debug": cmdDebug(modDir, flags, OPENROCK_ROOT); break;
+            case "info": cmdInfo(modDir, flags, OPENROCK_ROOT); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);
                 process.exitCode = cmd ? 1 : 0;

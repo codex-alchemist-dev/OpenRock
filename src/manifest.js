@@ -8,6 +8,7 @@
 
 const path = require("path");
 const semver = require("./semver.js");
+const { validateScripts } = require("./scriptsDecl.js");
 
 const VALID_KINDS = ["library", "mod"];
 const VALID_DEP_TYPES = ["submodule", "library"];
@@ -164,6 +165,10 @@ function validateManifest(manifest) {
         // of hand-writing JSON" (the original OR-Track B2 ask) real,
         // instead of just a library of builder functions nothing ever calls.
     }
+
+    // scripts: declares in-world/build-time script status plus any
+    // "external" scripts to surface to users - see src/scriptsDecl.js.
+    validateScripts(manifest);
 }
 
 // A mod (and OR-Track K's hybrid libraries, later) needs real pack UUIDs to
