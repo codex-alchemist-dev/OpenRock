@@ -60,10 +60,11 @@ const cmdDebug = require("../src/commands/debug.js");
 const cmdInfo = require("../src/commands/info.js");
 const { cmdTranslate } = require("../src/commands/translate.js");
 const { cmdCinema } = require("../src/commands/cinema.js");
+const { cmdScaffold } = require("../src/commands/scaffold.js");
 const { runPrebuild } = require("../src/commands/shared.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
-const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info", "translate", "cinema"];
+const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info", "translate", "cinema", "scaffold"];
 
 async function main() {
     const args = process.argv.slice(2);
@@ -86,6 +87,7 @@ async function main() {
             case "info": cmdInfo(modDir, flags, OPENROCK_ROOT); break;
             case "translate": await cmdTranslate(positional[1], modDir, flags); break;
             case "cinema": await cmdCinema(positional[1], modDir, flags); break;
+            case "scaffold": cmdScaffold(positional[1], positional[2]); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);
                 process.exitCode = cmd ? 1 : 0;
