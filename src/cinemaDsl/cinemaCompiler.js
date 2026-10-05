@@ -11,6 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const { parse } = require("./parser.js");
 const { compileProgram } = require("./timeline.js");
+const { lintTimeline } = require("./lint.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
 
 const VIRTUAL_NAME = "openrock-cinema-data";
@@ -31,6 +32,7 @@ function compileCinemaDsl(cinemaDir) {
     return withCompileCache(compileCache, cinemaDir, signature, [__dirname], () => {
         const timelines = [];
         const seenIds = new Map();
+        const lintIssues = [];
         files.forEach((file, i) => {
             const source = fs.readFileSync(abs[i], "utf8");
             const compiled = compileProgram(parse(source, file), { source, filename: file });
@@ -38,8 +40,12 @@ function compileCinemaDsl(cinemaDir) {
                 if (seenIds.has(t.id)) throw new Error(`duplicate cutscene id "${t.id}" in ${file} (already defined in ${seenIds.get(t.id)})`);
                 seenIds.set(t.id, file);
                 timelines.push(t);
+                lintIssues.push(...lintTimeline(t).map(w => `${file}: ${w}`));
             }
         });
+        if (lintIssues.length) {
+            for (const issue of lintIssues) console.warn(`  WARNING: ${issue}`);
+        }
         const bp = { [`.openrock-virtual/${VIRTUAL_NAME}.js`]: emitDataModule(timelines) };
         for (const t of timelines) bp[`cinema/${t.id}.json`] = t;
         return { bp, rp: {} };

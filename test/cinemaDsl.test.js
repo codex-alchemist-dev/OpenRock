@@ -10,6 +10,7 @@ const path = require("path");
 const { lex } = require("../src/cinemaDsl/lexer.js");
 const { parse } = require("../src/cinemaDsl/parser.js");
 const { compileProgram } = require("../src/cinemaDsl/timeline.js");
+const { lintTimeline } = require("../src/cinemaDsl/lint.js");
 const { buildMod } = require("../src/buildPipeline.js");
 
 let passed = 0;
@@ -175,6 +176,28 @@ unlock`));
     assert.ok(opNames.includes("set_flag"));
     assert.ok(c.events.find(e => e.op === "camera.dolly")?.args.by);
     assert.ok(c.events.find(e => e.op === "camera.roll")?.args.pos[0]);
+});
+
+test("lint: warns on long cutscene, lock free, consecutive camera cuts, unpaired screen show, high particle count", () => {
+    const long = one(wrap(`wait 301s\nunlock`));
+    const warnLong = lintTimeline(long);
+    assert.ok(warnLong.some(w => w.includes("longer than 5 minutes")));
+
+    const freeCam = one(wrap(`lock free\nunlock`));
+    const warnFree = lintTimeline(freeCam);
+    assert.ok(warnFree.some(w => w.includes("free-cam")));
+
+    const doubleCut = one(wrap(`camera cut to (0,0,0)\ncamera cut to (1,1,1)\nunlock`));
+    const warnCut = lintTimeline(doubleCut);
+    assert.ok(warnCut.some(w => w.includes("immediately follows")));
+
+    const unpairedShow = one(wrap(`screen show "bg"\nunlock`));
+    const warnShow = lintTimeline(unpairedShow);
+    assert.ok(warnShow.some(w => w.includes("never hidden")));
+
+    const manyParticles = one(wrap(`particles "boom" at (0,0,0) count 600\nunlock`));
+    const warnParticles = lintTimeline(manyParticles);
+    assert.ok(warnParticles.some(w => w.includes("may cause lag")));
 });
 
 console.log(`\n${passed} passed`);
