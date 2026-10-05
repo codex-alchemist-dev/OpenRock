@@ -8,7 +8,7 @@
 // proven emission backend.
 "use strict";
 
-const { tsPaths, withAlias } = require("../dslAlias.js");
+const { tsPaths, withAlias, withVars } = require("../dslAlias.js");
 
 const fs = require("fs");
 const path = require("path");
@@ -114,14 +114,14 @@ function findCompiledFile(dir, filename) {
  *   client_entity visual document, only when the author gave real visual
  *   props on `<Entity>` - see entityBuilder.js's buildClientEntityDoc()).
  */
-function compileEntityDsl(entityDslDir, { outDir } = {}) {
+function compileEntityDsl(entityDslDir, { outDir, vars } = {}) {
     if (!fs.existsSync(entityDslDir)) return { bp: {}, rp: {} };
     const sourceFiles = fs.readdirSync(entityDslDir).filter(f => /\.entity\.tsx?$/.test(f));
     if (sourceFiles.length === 0) return { bp: {}, rp: {} };
 
     const sourceAbsPaths = sourceFiles.map(f => path.join(entityDslDir, f));
     const signature = signatureForFiles([...sourceAbsPaths, ...RUNTIME_FILES, ...collectAllAssetSourcePaths(entityDslDir)]);
-    const cacheKey = `${entityDslDir}::${outDir ?? ""}`; // outDir is part of the real cache identity - a different outDir needs a real recompile, never a stale cached path
+    const cacheKey = `${entityDslDir}::${outDir ?? ""}::${JSON.stringify(vars ?? {})}`; // outDir is part of the real cache identity - a different outDir needs a real recompile, never a stale cached path
 
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
         const realOutDir = outDir ?? path.join(entityDslDir, ".entity-dsl-dist");
@@ -147,7 +147,7 @@ function compileEntityDsl(entityDslDir, { outDir } = {}) {
             const baseName = sourceFile.replace(/\.entity\.tsx?$/, "");
             const compiledPath = findCompiledFile(realOutDir, `${baseName}.entity.js`);
             if (!compiledPath) throw new Error(`entityCompiler: couldn't find compiled output for "${sourceFile}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
-            const mod = withAlias("entity", () => requireCompiled(compiledPath));
+            const mod = withVars(vars, () => withAlias("entity", () => requireCompiled(compiledPath)));
             const entityNode = mod.default ?? mod;
             if (!entityNode || entityNode.tag !== "Entity") {
                 throw new Error(`entityCompiler: "${sourceFile}" must default-export a real <Entity> node, got ${JSON.stringify(entityNode)}`);

@@ -16,7 +16,7 @@ function raw(tag, attrs) {
 /** The whole item DSL file's top-level node. @param {object} props - identifier (required), menuCategory. */
 function Item(props) {
     if (!props.identifier) throw new Error("Crystal Manifest-Item: <Item> needs a real identifier");
-    return { tag: "Item", attrs: { identifier: props.identifier, menuCategory: props.menuCategory }, children: props.children ?? [], line: 0 };
+    return { tag: "Item", attrs: { identifier: props.identifier, menuCategory: props.menuCategory, formatVersion: props.formatVersion }, children: props.children ?? [], line: 0 };
 }
 
 function RawComponent(props) {
@@ -52,7 +52,11 @@ function Fuel(props) { return raw("RawComponent", { type: "minecraft:fuel", valu
 function HoverTextColor(props) { return raw("RawComponent", { type: "minecraft:hover_text_color", value: props.value }); }
 function AllowOffHand(props) { return raw("RawComponent", { type: "minecraft:allow_off_hand", value: props.value ?? true }); }
 
+/** The build's template variables (mod `templateVars`, `ns`, and anything `content.dslVarsProvider` computed) - numbers/arrays included. */
+function vars() { return globalThis.__openrockDslVars ?? {}; }
+
 module.exports = {
+    vars,
     Item, RawComponent,
     Icon, MaxStackSize, DisplayName, Food, Durability, HandEquipped, Wearable, Digger, Fuel, HoverTextColor, AllowOffHand,
 };

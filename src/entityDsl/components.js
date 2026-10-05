@@ -148,7 +148,11 @@ function Pathfinding(props) {
     return { tag: "Pathfinding", attrs: { slots: props.slots, tagPrefix: props.tagPrefix }, children: [], line: 0 };
 }
 
+/** The build's template variables (mod `templateVars`, `ns`, and anything `content.dslVarsProvider` computed) - numbers/arrays included. */
+function vars() { return globalThis.__openrockDslVars ?? {}; }
+
 module.exports = {
+    vars,
     Entity, ComponentGroup, RawComponent,
     Health, Movement, CollisionBox, NavigationWalk, Physics, Pushable, TypeFamily, Scale,
     Pathfinding,

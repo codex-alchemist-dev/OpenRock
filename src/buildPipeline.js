@@ -74,6 +74,7 @@ const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
 const { mergeManifestDoc } = require("./manifestDsl/manifestBuilder.js");
 const { formatEsbuildFailure } = require("./buildDiagnostics.js");
 const { extractVirtualModules, materializeVirtualModules, stripVirtual, isVirtualKey, VIRTUAL_PREFIX } = require("./virtualModules.js");
+const { computeVars, fill, fillDoc } = require("./dslVars.js");
 const { renderUiDir } = require("./uiStage.js");
 const { renderGeneratedModules } = require("./generatedModules.js");
 const { isMergedLangOutput, mergeLangOutput, injectPackStrings } = require("./packLang.js");
@@ -93,10 +94,6 @@ const BEDROCK_BUILTIN_MODULES = [
 /** True for a mod, or a hybrid library that declares its own "packs" (OR-Track K). */
 function isBuildablePackage(manifest) {
     return manifest.kind === "mod" || (manifest.kind === "library" && Boolean(manifest.packs));
-}
-
-function fill(text, vars) {
-    return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
 }
 
 const put = (map, rel, data) => map.set(rel, Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
@@ -309,12 +306,6 @@ function putJson(map, outRel, obj) {
 // dispatches to the right real handling for each, so a texture Buffer
 // never gets accidentally run through JSON.stringify() (which would
 // mangle it into a {"type":"Buffer","data":[...]} object, not real bytes).
-/** {{vars}} inside a compiled JSON document (e.g. an entity identifier authored as "{{ns}}:x" in a library). Strings/Buffers pass through. */
-function fillDoc(doc, vars) {
-    if (!doc || typeof doc !== "object" || Buffer.isBuffer(doc)) return doc;
-    return JSON.parse(fill(JSON.stringify(doc), vars));
-}
-
 function putDirectoryDslEntry(map, outRel, value) {
     if (isMergedLangOutput(outRel) && map.has(outRel)) return put(map, outRel, mergeLangOutput(outRel, map.get(outRel), value));
     if (Buffer.isBuffer(value) || typeof value === "string") put(map, outRel, value);
@@ -366,19 +357,8 @@ function assertNotNativeOnlyPath(manifestName, outRel) {
  * createIncrementalBuild()'s rebuild() (called for just the one entry that
  * owns a changed file).
  */
-/**
- * Template variables for `{{name}}` placeholders in a package's content. `ns` is the
- * package's own namespace (falling back to the mod's, so a namespace-less library's
- * templates land in the mod's namespace); every other variable comes from the ROOT mod's
- * `templateVars`, so a library's templates (e.g. OpenChara's `{{char}}`) are filled
- * with the consuming mod's values.
- */
-function templateVarsFor(entryManifest, rootManifest) {
-    return { ...(rootManifest?.templateVars ?? {}), ns: entryManifest.namespace ?? rootManifest?.namespace ?? "" };
-}
-
 function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null) {
-    const vars = templateVarsFor(manifest, rootManifest);
+    const vars = computeVars(manifest, entryDir, rootManifest);
     const content = manifest.content ?? {};
 
     for (const [field, map] of [["bpOverlayDir", bp], ["rpOverlayDir", rp]]) {
@@ -459,7 +439,7 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
             if (!content[contentField]) continue;
             if (!bp && !allowWithoutBehavior) continue;
             const dslDirAbs = path.resolve(entryDir, content[contentField]);
-            const output = compile(dslDirAbs);
+            const output = compile(dslDirAbs, { vars });
             if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), fillDoc(doc, vars));
             if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), fillDoc(doc, vars));
         }
@@ -829,13 +809,13 @@ function createIncrementalBuild(modDir, opts = {}) {
         directoryDslOutputKeys.clear();
         {
             for (const { manifest, dir: entryDir } of plan.ordered) {
-                const vars = templateVarsFor(manifest, plan.modManifest);
+                const vars = computeVars(manifest, entryDir, plan.modManifest);
                 for (const { contentField, compile, allowWithoutBehavior } of DIRECTORY_DSLS) {
                     const dslRel = manifest.content?.[contentField];
                     if (!dslRel) continue;
                     if (!bp && !allowWithoutBehavior) continue;
                     const dirAbs = path.resolve(entryDir, dslRel);
-                    const output = compile(dirAbs);
+                    const output = compile(dirAbs, { vars });
                     directoryDslOutputKeys.set(dirAbs, {
                         bp: new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars))),
                         rp: new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars))),
@@ -856,7 +836,7 @@ function createIncrementalBuild(modDir, opts = {}) {
             case "overlay": {
                 const map = target.side === "bp" ? bp : rp;
                 if (!map) return fullBuild(); // shouldn't happen (bp overlay with no bp), but never guess
-                const vars = templateVarsFor(target.entry.manifest, plan.modManifest);
+                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest);
                 const rel = path.relative(target.dirAbs, path.resolve(absChangedPath)).split(path.sep).join("/");
                 const outRel = fill(rel, vars);
                 assertNotNativeOnlyPath(target.entry.manifest.name, outRel);
@@ -882,8 +862,8 @@ function createIncrementalBuild(modDir, opts = {}) {
                 // compile() re-lists target.dirAbs itself, so an
                 // added/removed source file in this same directory is
                 // picked up for real too, not just an edit to an existing one.
-                const vars = templateVarsFor(target.entry.manifest, plan.modManifest);
-                const output = target.compile(target.dirAbs);
+                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest);
+                const output = target.compile(target.dirAbs, { vars });
                 const freshBpKeys = new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars)));
                 const freshRpKeys = new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars)));
 

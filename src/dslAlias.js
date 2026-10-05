@@ -33,4 +33,11 @@ function withAlias(dialect, fn) {
     try { return fn(); } finally { Module._resolveFilename = original; }
 }
 
-module.exports = { aliasMap, tsPaths, withAlias };
+/** Exposes the build's template vars to the DSL source being evaluated (read via vars() from the dialect components). */
+function withVars(vars, fn) {
+    const prev = globalThis.__openrockDslVars;
+    globalThis.__openrockDslVars = vars ?? {};
+    try { return fn(); } finally { globalThis.__openrockDslVars = prev; }
+}
+
+module.exports = { aliasMap, tsPaths, withAlias, withVars };

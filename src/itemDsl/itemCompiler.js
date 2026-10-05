@@ -3,7 +3,7 @@
 // real tsc, real requireCompiled(), OR-Track Q6's real compile cache.
 "use strict";
 
-const { tsPaths, withAlias } = require("../dslAlias.js");
+const { tsPaths, withAlias, withVars } = require("../dslAlias.js");
 
 const fs = require("fs");
 const path = require("path");
@@ -40,14 +40,14 @@ function findCompiledFile(dir, filename) {
  *   shape-uniformity with the other Crystal Manifest-* compilers, see
  *   src/buildPipeline.js's DIRECTORY_DSLS).
  */
-function compileItemDsl(itemDslDir, { outDir } = {}) {
+function compileItemDsl(itemDslDir, { outDir, vars } = {}) {
     if (!fs.existsSync(itemDslDir)) return { bp: {}, rp: {} };
     const sourceFiles = fs.readdirSync(itemDslDir).filter(f => /\.item\.tsx?$/.test(f));
     if (sourceFiles.length === 0) return { bp: {}, rp: {} };
 
     const sourceAbsPaths = sourceFiles.map(f => path.join(itemDslDir, f));
     const signature = signatureForFiles([...sourceAbsPaths, ...RUNTIME_FILES]);
-    const cacheKey = `${itemDslDir}::${outDir ?? ""}`;
+    const cacheKey = `${itemDslDir}::${outDir ?? ""}::${JSON.stringify(vars ?? {})}`;
 
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
         const realOutDir = outDir ?? path.join(itemDslDir, ".item-dsl-dist");
@@ -68,7 +68,7 @@ function compileItemDsl(itemDslDir, { outDir } = {}) {
             const baseName = sourceFile.replace(/\.item\.tsx?$/, "");
             const compiledPath = findCompiledFile(realOutDir, `${baseName}.item.js`);
             if (!compiledPath) throw new Error(`itemCompiler: couldn't find compiled output for "${sourceFile}" under ${realOutDir} - real tsc succeeded but produced no matching file`);
-            const mod = withAlias("item", () => requireCompiled(compiledPath));
+            const mod = withVars(vars, () => withAlias("item", () => requireCompiled(compiledPath)));
             const itemNode = mod.default ?? mod;
             if (!itemNode || itemNode.tag !== "Item") {
                 throw new Error(`itemCompiler: "${sourceFile}" must default-export a real <Item> node, got ${JSON.stringify(itemNode)}`);

@@ -35,7 +35,7 @@ function buildItem(itemNode) {
     }
 
     return {
-        format_version: "1.21.0",
+        format_version: itemNode.attrs.formatVersion ?? "1.21.0",
         "minecraft:item": { description, components },
     };
 }

@@ -18,7 +18,8 @@
     }
   },
   "content": {
-    "entityDsl": "."
+    "entityDsl": ".",
+    "dslVarsProvider": "vars.js"
   },
   "templateVars": {
     "char": "waifu"
