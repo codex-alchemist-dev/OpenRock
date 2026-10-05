@@ -7,7 +7,9 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { resolveBundledLibraryDirs } = require("../buildPipeline.js");
+const { resolveBundledLibraryDirs, collectEntries } = require("../buildPipeline.js");
+const { loadManifestFile } = require("../manifest.js");
+const { runLocalizationPrebuild } = require("../../libs/localization/src/prebuild.js");
 const { runSmokeTest } = require("../bdsTestHarness.js");
 
 function stamp() { return new Date().toTimeString().slice(0, 8); }
@@ -27,7 +29,9 @@ function comMojang() {
 
 /** The real buildMod() opts every build-family command shares: vendor/ by convention, OpenRock's own bundled libs/* resolved by name. */
 function buildOpts(modDir, openrockRoot) {
-    return { vendorDir: path.join(modDir, "vendor"), libraryDirs: resolveBundledLibraryDirs(openrockRoot) };
+    // A package with no vendor/ of its own (e.g. a bundled lib/ inspected in place) resolves submodule deps against OpenRock's own root.
+    const local = path.join(modDir, "vendor");
+    return { vendorDir: fs.existsSync(local) ? local : openrockRoot, libraryDirs: resolveBundledLibraryDirs(openrockRoot) };
 }
 
 /**
@@ -70,4 +74,21 @@ async function maybeRunSmokeTest(r, flags, quiet = false) {
     }
 }
 
-module.exports = { stamp, comMojang, buildOpts, maybeRunSmokeTest };
+/**
+ * Async pre-build steps that must finish before the synchronous build reads
+ * the filesystem. Today: opt-in machine translation (localization.json
+ * "autoTranslate"). Silently does nothing for a directory that isn't a package.
+ */
+async function runPrebuild(modDir, openrockRoot) {
+    let root;
+    try { root = loadManifestFile(modDir); } catch { return; }
+    const entries = collectEntries(root.manifest, root.dir, buildOpts(modDir, openrockRoot));
+    for (const { manifest, dir } of entries.values()) {
+        const rel = manifest.content?.localization;
+        if (!rel) continue;
+        const r = await runLocalizationPrebuild({ locDir: path.resolve(dir, rel), scanDir: dir, log: m => console.log(`[${stamp()}] ${m}`) });
+        if (r.failed?.length) throw new Error(`localization MTL failed for ${r.failed.length} string(s): ${r.failed.map(f => `${f.lang}:${f.key}`).join(", ")}`);
+    }
+}
+
+module.exports = { stamp, comMojang, buildOpts, maybeRunSmokeTest, runPrebuild };

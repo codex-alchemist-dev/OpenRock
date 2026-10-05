@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/localization",
+  "version": "1.0.0",
+  "description": "Localization toolkit: string catalog with stale tracking, placeholder-safe machine translation with a pluggable provider contract, spreadsheet (CSV) round-trip, and .lang emission for the declarative UI.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}

@@ -67,6 +67,7 @@ const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
 const { compileBlockDsl } = require("./blockDsl/blockCompiler.js");
 const { compileItemDsl } = require("./itemDsl/itemCompiler.js");
 const { compileCinemaDsl } = require("./cinemaDsl/cinemaCompiler.js");
+const { compileLocalization } = require("../libs/localization/src/emit.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
 const { compileManifestDsl } = require("./manifestDsl/manifestCompiler.js");
@@ -111,6 +112,8 @@ const DIRECTORY_DSLS = [
     { contentField: "blockDsl", compile: compileBlockDsl },
     { contentField: "itemDsl", compile: compileItemDsl },
     { contentField: "cinemaDsl", compile: compileCinemaDsl },
+    // allowWithoutBehavior: the output is valid for a resource-pack-only mod too (text/lang files).
+    { contentField: "localization", compile: compileLocalization, allowWithoutBehavior: true },
 ];
 
 /**
@@ -393,12 +396,13 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi)
     // M/M4/M5, made real): each is a directory of real *.<kind>.tsx files,
     // compiled into real Bedrock JSON, merged into the pack the same way
     // datagenEntry's output is.
-    if (bp) {
-        for (const { contentField, compile } of DIRECTORY_DSLS) {
+    {
+        for (const { contentField, compile, allowWithoutBehavior } of DIRECTORY_DSLS) {
             if (!content[contentField]) continue;
+            if (!bp && !allowWithoutBehavior) continue;
             const dslDirAbs = path.resolve(entryDir, content[contentField]);
             const output = compile(dslDirAbs);
-            for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
+            if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), doc);
             if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), doc);
         }
     }
@@ -763,12 +767,13 @@ function createIncrementalBuild(modDir, opts = {}) {
         // renderEntryContent() above, so this is a guaranteed cache hit,
         // never a second real tsc invocation.
         directoryDslOutputKeys.clear();
-        if (bp) {
+        {
             for (const { manifest, dir: entryDir } of plan.ordered) {
                 const vars = { ns: manifest.namespace ?? "" };
-                for (const { contentField, compile } of DIRECTORY_DSLS) {
+                for (const { contentField, compile, allowWithoutBehavior } of DIRECTORY_DSLS) {
                     const dslRel = manifest.content?.[contentField];
                     if (!dslRel) continue;
+                    if (!bp && !allowWithoutBehavior) continue;
                     const dirAbs = path.resolve(entryDir, dslRel);
                     const output = compile(dirAbs);
                     directoryDslOutputKeys.set(dirAbs, {
