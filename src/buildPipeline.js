@@ -67,6 +67,7 @@ const { compileEntityDsl } = require("./entityDsl/entityCompiler.js");
 const { compileBlockDsl } = require("./blockDsl/blockCompiler.js");
 const { compileItemDsl } = require("./itemDsl/itemCompiler.js");
 const { compileCinemaDsl } = require("./cinemaDsl/cinemaCompiler.js");
+const { compileFmbeDsl } = require("./fmbeDsl/fmbeCompiler.js");
 const { compileLocalization } = require("../libs/localization/src/emit.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
@@ -124,6 +125,7 @@ const DIRECTORY_DSLS = [
     { contentField: "blockDsl", compile: compileBlockDsl },
     { contentField: "itemDsl", compile: compileItemDsl },
     { contentField: "cinemaDsl", compile: compileCinemaDsl },
+    { contentField: "fmbeDsl", compile: compileFmbeDsl },
     // allowWithoutBehavior: the output is valid for a resource-pack-only mod too (text/lang files).
     { contentField: "localization", compile: compileLocalization, allowWithoutBehavior: true },
 ];

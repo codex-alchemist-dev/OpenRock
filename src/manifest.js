@@ -136,7 +136,7 @@ function validateManifest(manifest) {
     if (manifest.content !== undefined) {
         const c = manifest.content;
         if (!c || typeof c !== "object") throw new Error(`manifest.content must be an object`);
-        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "dslVarsProvider", "entityDsl", "manifestDsl", "blockDsl", "itemDsl", "cinemaDsl", "localization"]) {
+        for (const field of ["scriptsDir", "bpOverlayDir", "rpOverlayDir", "uiDir", "scriptEntry", "datagenEntry", "dslVarsProvider", "entityDsl", "manifestDsl", "blockDsl", "itemDsl", "cinemaDsl", "fmbeDsl", "localization"]) {
             if (c[field] !== undefined && typeof c[field] !== "string") throw new Error(`manifest.content.${field} must be a string path`);
         }
         if (c.scriptAliases !== undefined && (!c.scriptAliases || typeof c.scriptAliases !== "object" || Object.values(c.scriptAliases).some(v => typeof v !== "string"))) throw new Error(`manifest.content.scriptAliases must map alias names to script paths`);
