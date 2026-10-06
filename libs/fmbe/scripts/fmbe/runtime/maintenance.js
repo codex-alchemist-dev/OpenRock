@@ -12,7 +12,7 @@ const { evaluate } = exprLib;
 
 const attempt = (fn, fallback = null) => { try { return fn(); } catch (e) { return fallback; } };
 
-/** Spawns pending displays, at most `budget` per tick; a display that keeps failing is dropped after `maxAttempts`. */
+/** Spawns pending displays, at most `budget` per tick. A block with no item form is given up on at once; a spawn that keeps failing (chunk not loaded) after `maxAttempts`. */
 export function runSpawnQueue(pending, budget, maxAttempts, host) {
     let spawned = 0;
     for (const d of pending) {
@@ -21,7 +21,12 @@ export function runSpawnQueue(pending, budget, maxAttempts, host) {
         try { d.materialize(); spawned++; }
         catch (e) {
             d.attempts++;
-            if (d.attempts >= maxAttempts) { host.fail(new Error(`${d.label()}: gave up spawning after ${d.attempts} attempts (${e?.message ?? e})`)); d.remove(); }
+            const permanent = e?.name === "FmbeItemError";
+            if (permanent || d.attempts >= maxAttempts) {
+                const err = permanent ? e : new Error(`${d.label()}: gave up spawning after ${d.attempts} attempts (${e?.message ?? e})`);
+                d.remove();
+                if (d.onGiveUp) attempt(() => d.onGiveUp(d, err)); else host.fail(permanent ? new Error(`${d.label()}: ${e.message}`) : err);
+            }
         }
     }
     return spawned;

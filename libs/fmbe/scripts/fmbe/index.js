@@ -9,7 +9,7 @@ import expr from "./expr.cjs";
 import molang from "./molangEval.cjs";
 
 export { createFmbe } from "./runtime/manager.js";
-export { Display } from "./runtime/display.js";
+export { Display, FmbeItemError } from "./runtime/display.js";
 export { Group } from "./runtime/group.js";
 export const { normalizeSpec, FmbeSpecError } = spec;
 export const { commandsFor, renderCommands, variablesCommand, staticCommands, specAssignments, stopSoundCommands, structureSaveCommand, structureLoadCommand, lootMineCommand, IMMOBILIZE_EFFECTS } = commands;

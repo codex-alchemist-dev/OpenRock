@@ -44,18 +44,28 @@ await test("spawn budget: at most maxSpawnPerTick foxes per tick", () => {
     assert.deepStrictEqual(fmbe.stats(), { total: 10, live: 10, pending: 0, running: true });
 });
 
-await test("a block with no item is dropped after maxAttempts and reported; a chunk that is not loaded is retried", () => {
+await test("a block with no item form is given up on at once (callback or onError); a chunk that is not loaded is retried", () => {
     const { fmbe, overworld, tick, errors, entities } = setup({ maxAttempts: 3 });
     overworld.badItems = ["modded:ghost"];
     const bad = fmbe.spawn(overworld, at, { item: "modded:ghost" });
-    tick(5);
-    assert.strictEqual(bad.state, "removed");
-    assert.ok(errors.some(e => /gave up spawning after 3 attempts.*no item/.test(e)), errors.join("|"));
+    tick(1);
+    assert.strictEqual(bad.state, "removed", "no retries for a permanent failure");
+    assert.ok(errors.some(e => /no item for "modded:ghost"/.test(e)), errors.join("|"));
     assert.ok(entities.every(e => !e.isValid), "no half-built fox left behind");
+    let given = null;
+    fmbe.spawn(overworld, at, { item: "modded:ghost" }, { onGiveUp: (d, err) => { given = [d.spec.item, err.name]; } });
+    tick(1);
+    assert.deepStrictEqual(given, ["modded:ghost", "FmbeItemError"]);
     overworld.failSpawns = 2;
     const late = fmbe.spawn(overworld, at, { item: "minecraft:stone" });
     tick(5);
     assert.strictEqual(late.state, "live", "retried until the chunk loaded");
+    overworld.failSpawns = 99;
+    let gaveUp = null;
+    const never = fmbe.spawn(overworld, at, { item: "minecraft:stone" }, { onGiveUp: (d, err) => { gaveUp = err.message; } });
+    tick(6);
+    assert.strictEqual(never.state, "removed");
+    assert.match(gaveUp, /gave up spawning after 3 attempts/);
 });
 
 await test("set/tween: variables update live; a tween sends formulas, then settles to plain numbers", () => {

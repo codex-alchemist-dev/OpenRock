@@ -11,6 +11,11 @@ const { normalizeSpec } = specLib;
 const { commandsFor, variablesCommand, specAssignments, replaceItemCommand, IMMOBILIZE_EFFECTS } = cmds;
 const { tweenAssignments, diffChannels } = tweenLib;
 
+/** The game has no item form for the display's block/item: retrying cannot help. */
+export class FmbeItemError extends Error {
+    constructor(item) { super(`no item for "${item}"`); this.name = "FmbeItemError"; this.item = item; }
+}
+
 const attempt = (fn, fallback = null) => { try { return fn(); } catch (e) { return fallback; } };
 
 export class Display {
@@ -23,6 +28,7 @@ export class Display {
         this.owner = opts.owner ?? null;
         this.group = opts.group ?? null;
         this.persist = !!opts.persist;
+        this.onGiveUp = opts.onGiveUp ?? null;   // (display, error) when it can never be spawned (no item for the block, too many failed attempts)
         this.extraTags = opts.tags ?? [];
         this.state = "pending";       // pending -> live -> removed (a lost entity goes back to pending when it is respawned)
         this.entity = null;
@@ -42,7 +48,7 @@ export class Display {
             this.host.markEntity(fox, this);
             for (const [effect, amplifier] of IMMOBILIZE_EFFECTS) attempt(() => fox.addEffect(effect, 20000000, { amplifier, showParticles: false }));
             this.entity = fox;
-            if (!this.giveItem(this.spec.item)) throw new Error(`no item for "${this.spec.item}"`);
+            if (!this.giveItem(this.spec.item)) throw new FmbeItemError(this.spec.item);
             this.state = "live";
             this.sendAll();
         } catch (e) {
