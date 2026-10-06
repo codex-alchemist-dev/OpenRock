@@ -34,7 +34,16 @@ function writeLooseScripts(modDir, outDir, opts = {}) {
         }
     }
     const specifiers = new Map(); // bare specifier -> output file
-    for (const [spec, abs] of plan.resolveMap) if (placed.has(abs)) specifiers.set(spec, placed.get(abs));
+    for (const [spec, abs] of plan.resolveMap) {
+        if (placed.has(abs)) { specifiers.set(spec, placed.get(abs)); continue; }
+        // A dependency that ships plain code through provides.api (e.g. @mclite/core, CommonJS): copy its source dir as-is.
+        if (spec.includes("/") && !spec.startsWith("@")) continue;
+        const src = path.dirname(abs);
+        const dest = path.join(outDir, "scripts", "_deps", spec.replace(/[^a-z0-9]+/gi, "_"));
+        fs.cpSync(src, dest, { recursive: true, filter: f => !/(^|[\/])(node_modules|test)([\/]|$)/.test(path.relative(src, f)) });
+        fs.writeFileSync(path.join(dest, "package.json"), JSON.stringify({ type: "commonjs" }));
+        specifiers.set(spec, path.join(dest, path.basename(abs)));
+    }
 
     for (const out of placed.values()) {
         if (!out.endsWith(".js")) continue;
