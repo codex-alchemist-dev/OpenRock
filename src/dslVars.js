@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { readJsonTable, walk } = require("./generatedModules.js");
 
-function computeVars(entryManifest, entryDir, rootManifest, rootDir = null) {
+function computeVars(entryManifest, entryDir, rootManifest, rootDir = null, packages = []) {
     const vars = { ...(rootManifest?.templateVars ?? {}), ns: entryManifest.namespace ?? rootManifest?.namespace ?? "" };
     const rel = entryManifest.content?.dslVarsProvider;
     if (rel) {
@@ -16,7 +16,7 @@ function computeVars(entryManifest, entryDir, rootManifest, rootDir = null) {
         if (!fs.existsSync(abs)) throw new Error(`"${entryManifest.name}": content.dslVarsProvider "${rel}" doesn't exist`);
         const provider = require(abs);
         if (typeof provider !== "function") throw new Error(`"${entryManifest.name}": content.dslVarsProvider "${rel}" must export (ctx) => object`);
-        const extra = provider({ manifest: entryManifest, mod: rootManifest, modDir: rootDir, dir: entryDir, templateVars: vars, readJsonTable, walk });
+        const extra = provider({ manifest: entryManifest, mod: rootManifest, modDir: rootDir, packages, dir: entryDir, templateVars: vars, readJsonTable, walk });
         if (!extra || typeof extra !== "object") throw new Error(`"${entryManifest.name}": dslVarsProvider must return an object`);
         Object.assign(vars, extra);
     }

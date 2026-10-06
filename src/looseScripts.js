@@ -20,7 +20,7 @@ function walk(dir, out = []) {
 function writeLooseScripts(modDir, outDir, opts = {}) {
     const plan = resolveBuildPlan(modDir, opts);
     const bp = new Map(), rp = new Map();
-    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
+    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
     const virtuals = extractVirtualModules(bp);
 
     const placed = new Map(); // absolute source file -> absolute output file

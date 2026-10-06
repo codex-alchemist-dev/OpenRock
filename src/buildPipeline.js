@@ -370,8 +370,8 @@ function assertNotNativeOnlyPath(manifestName, outRel) {
  * createIncrementalBuild()'s rebuild() (called for just the one entry that
  * owns a changed file).
  */
-function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null, rootDir = null) {
-    const vars = computeVars(manifest, entryDir, rootManifest, rootDir);
+function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null, rootDir = null, packages = []) {
+    const vars = computeVars(manifest, entryDir, rootManifest, rootDir, packages);
     const content = manifest.content ?? {};
 
     for (const [field, map] of [["bpOverlayDir", bp], ["rpOverlayDir", rp]]) {
@@ -401,7 +401,7 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
 
     // content.generatedModules: build-time Node providers of JS source -> @openrock/virtual/<name>.
     if (content.generatedModules && bp) {
-        for (const [name, out] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, modDir: rootDir, templateVars: vars })) {
+        for (const [name, out] of renderGeneratedModules(manifest, entryDir, { mod: rootManifest, modDir: rootDir, templateVars: vars, packages })) {
             put(bp, `${VIRTUAL_PREFIX}${name}.js`, out.source);
             for (const [map, files] of [[bp, out.bp], [rp, out.rp]]) {
                 for (const [outRel, data] of Object.entries(files)) {
@@ -586,7 +586,7 @@ function buildMod(modDir, opts = {}) {
     const bp = plan.hasBehaviorPack ? new Map() : null;
     const rp = new Map();
 
-    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
+    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
 
     const lintIssues = runEntityLints({ bp, rp });
     layerOverSource([bp, rp]);
@@ -808,7 +808,7 @@ function createIncrementalBuild(modDir, opts = {}) {
         plan = resolveBuildPlan(modDir, opts);
         bp = plan.hasBehaviorPack ? new Map() : null;
         rp = new Map();
-        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir);
+        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
         const lintIssues = runEntityLints({ bp, rp });
         layerOverSource([bp, rp]);
     injectPackStrings(plan.modManifest, [bp, rp]);
@@ -825,7 +825,7 @@ function createIncrementalBuild(modDir, opts = {}) {
         directoryDslOutputKeys.clear();
         {
             for (const { manifest, dir: entryDir } of plan.ordered) {
-                const vars = computeVars(manifest, entryDir, plan.modManifest, plan.dir);
+                const vars = computeVars(manifest, entryDir, plan.modManifest, plan.dir, plan.ordered);
                 for (const { contentField, compile, allowWithoutBehavior } of DIRECTORY_DSLS) {
                     const dslRel = manifest.content?.[contentField];
                     if (!dslRel) continue;
@@ -852,7 +852,7 @@ function createIncrementalBuild(modDir, opts = {}) {
             case "overlay": {
                 const map = target.side === "bp" ? bp : rp;
                 if (!map) return fullBuild(); // shouldn't happen (bp overlay with no bp), but never guess
-                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest, plan.dir);
+                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest, plan.dir, plan.ordered);
                 const rel = path.relative(target.dirAbs, path.resolve(absChangedPath)).split(path.sep).join("/");
                 const outRel = fill(rel, vars);
                 assertNotNativeOnlyPath(target.entry.manifest.name, outRel);
@@ -878,7 +878,7 @@ function createIncrementalBuild(modDir, opts = {}) {
                 // compile() re-lists target.dirAbs itself, so an
                 // added/removed source file in this same directory is
                 // picked up for real too, not just an edit to an existing one.
-                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest, plan.dir);
+                const vars = computeVars(target.entry.manifest, target.entry.dir, plan.modManifest, plan.dir, plan.ordered);
                 const output = target.compile(target.dirAbs, { vars });
                 const freshBpKeys = new Set(Object.keys(output.bp ?? {}).map(k => fill(k, vars)));
                 const freshRpKeys = new Set(Object.keys(output.rp ?? {}).map(k => fill(k, vars)));
