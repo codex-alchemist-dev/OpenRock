@@ -78,7 +78,7 @@ class EntityBuilder {
 // props at all - a real, deliberate choice (a summon-only helper entity
 // with no client presence), never a required document.
 function buildClientEntityDoc(identifier, attrs) {
-    const { materials, textures, geometry, renderControllers, spawnEgg, enableAttachables, hideArmor, clientFormatVersion = "1.16.0" } = attrs;
+    const { materials, textures, geometry, renderControllers, spawnEgg, enableAttachables, hideArmor, clientScripts, clientFormatVersion = "1.16.0" } = attrs;
     if (!materials && !textures && !geometry && !renderControllers && !spawnEgg) return null;
     const description = { identifier };
     if (materials) description.materials = materials;
@@ -88,6 +88,7 @@ function buildClientEntityDoc(identifier, attrs) {
     if (spawnEgg) description.spawn_egg = spawnEgg;
     if (enableAttachables !== undefined) description.enable_attachables = enableAttachables;
     if (hideArmor !== undefined) description.hide_armor = hideArmor;
+    if (clientScripts) description.scripts = clientScripts;
     return { format_version: clientFormatVersion, "minecraft:client_entity": { description } };
 }
 

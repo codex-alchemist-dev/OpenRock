@@ -59,6 +59,8 @@ function Entity(props) {
             formatVersion: props.formatVersion,
             clientFormatVersion: props.clientFormatVersion,
             runtimeIdentifier: props.runtimeIdentifier,
+            // client_entity description.scripts (e.g. { scale: "expression" }), passed through verbatim.
+            clientScripts: props.clientScripts,
             // Synced/server entity properties (description.properties), passed through verbatim.
             properties: props.properties,
         },
