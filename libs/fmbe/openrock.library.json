@@ -1,0 +1,13 @@
+{
+  "openrockVersion": 1,
+  "kind": "library",
+  "name": "@openrock/fmbe",
+  "version": "1.0.0",
+  "entry": "src/register.js",
+  "provides": { "api": "src/register.js", "hookNamespaces": ["fmbe"] },
+  "scripts": { "runtime": true },
+  "content": {
+    "scriptsDir": "scripts",
+    "scriptEntry": "fmbe/index.js"
+  }
+}

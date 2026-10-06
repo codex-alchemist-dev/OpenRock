@@ -1,0 +1,8 @@
+{
+  "name": "@openrock/fmbe",
+  "version": "1.0.0",
+  "description": "Fox MBE display entities for OpenRock: show any block or item with its real model, scaled/rotated/tweened by client-side animations, with a simple DSL.",
+  "license": "MPL-2.0",
+  "private": true,
+  "main": "src/register.js"
+}
