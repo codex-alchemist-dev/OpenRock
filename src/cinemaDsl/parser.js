@@ -42,13 +42,6 @@ function parse(source, filename) {
         return [x, y, z];
     }
 
-    function parseScreen() {
-        const t = expect("IDENT", "screen(x, y)");
-        if (t.value !== "screen") fail(`expected screen(x, y) but found ${describe(t)}`, t);
-        expect("LPAREN", "\"(\""); const x = parseNumber(); expect("COMMA", "\",\""); const y = parseNumber(); expect("RPAREN", "\")\"");
-        return { screen: [x, y] };
-    }
-
     // Returns the plain JSON value; pushes any cast-name reference onto `refs`.
     function parseValue(spec, refs, ctx) {
         const t = peek();
@@ -57,7 +50,6 @@ function parse(source, filename) {
             case "dur": return expect("DUR", `a duration with a unit (e.g. 1.5s, 20t, 500ms) for ${ctx}`).value;
             case "str": return expect("STR", `a quoted string for ${ctx}`).value;
             case "coord": return parseCoord();
-            case "screen": return parseScreen();
             case "target":
                 if (t.type === "LPAREN") return parseCoord();
                 if (t.type === "IDENT") { next(); refs.push({ name: t.value, line: t.line, col: t.col }); return t.value; }

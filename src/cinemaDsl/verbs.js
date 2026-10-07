@@ -4,7 +4,7 @@
 // and timeline compiler are all data-driven off this table, so adding a verb
 // (here, or from a library via registerVerb) never touches them.
 //
-// Value types: "num" | "dur" | "str" | "ident" | "coord" | "screen" |
+// Value types: "num" | "dur" | "str" | "ident" | "coord" |
 // "target" (a cast name or a coord) | "flag" (keyword with no value).
 // A spec is either a bare type string or { type, enum?, required? }.
 "use strict";
@@ -48,7 +48,7 @@ const req = type => ({ type, required: true });
 
 registerVerb("lock", { pos: [{ type: "ident", enum: ["cinematic", "position", "free"], required: true }], doc: "cinematic = camera+movement locked; position = movement locked, rotation free (360); free = free-cam, creator beware" });
 registerVerb("unlock", { doc: "release camera and movement locks, restore control" });
-registerVerb("mode", { pos: [{ type: "ident", enum: ["none", "letterbox"], required: true }] });
+registerVerb("mode", { pos: [{ type: "ident", enum: ["none", "letterbox"], required: true }], doc: "letterbox bars (drawn by the game's UI hook)" });
 registerVerb("fade", { pos: [{ type: "ident", enum: ["in", "out"], required: true }, req("dur")] });
 registerVerb("camera cut", { kw: { to: req("coord"), look_at: "target", fov: "num" } });
 registerVerb("camera move", { kw: { to: req("coord"), over: req("dur"), ease, look_at: "target" }, durationKw: "over" });
@@ -57,10 +57,33 @@ registerVerb("camera follow", { pos: [req("ident")] });
 registerVerb("camera orbit", { kw: { around: req("target"), radius: "num", speed: "num", over: req("dur") }, durationKw: "over" });
 registerVerb("camera shake", { kw: { strength: "num", for: req("dur") }, durationKw: "for" });
 registerVerb("camera fov", { pos: [req("num")], kw: { over: "dur", ease }, durationKw: "over" });
-registerVerb("camera pan_up", { kw: { over: req("dur"), ease }, durationKw: "over" });
+registerVerb("camera pan_up", { kw: { over: req("dur"), ease }, durationKw: "over", doc: "tilt the camera up to look at the sky (pitch -90), keeping its yaw" });
 registerVerb("screen show", { pos: [req("str")], kw: { fill: "flag", fade: "dur" } });
 registerVerb("screen hide", { kw: { fade: "dur" } });
-registerVerb("spawn_display", { pos: [req("str")], kw: { at: req("screen"), for: "dur" }, durationKw: "for" });
+// FMBE display entities (see docs/fmbe.md): any block or item, shown with its real model anywhere in the world.
+// A display has a NAME chosen at `display show`; every later display verb refers to it. Positions are world
+// coordinates, `rot` is degrees (x, y, z), `scale` 1 = a full block.
+const KINDS = ["block", "block2d", "item"];
+registerVerb("display show", {
+    pos: [req("ident"), { type: "ident", enum: KINDS, required: true }, req("str")],
+    kw: { at: req("coord"), rot: "coord", scale: "num", base: "coord", system: { type: "ident", enum: ["advanced", "basic", "static"] }, for: "dur" },
+    durationKw: "for",
+    doc: "show <name> <block|block2d|item> \"<id>\" at <coord> [rot] [scale] [base] [system] [for]: spawn a display; `for` removes it again",
+});
+registerVerb("display scene", {
+    pos: [req("ident"), req("str")],
+    kw: { at: req("coord"), yaw: "num", scale: "num", for: "dur" },
+    durationKw: "for",
+    doc: "scene <name> \"<scene id>\" at <coord> [yaw] [scale] [for]: spawn a compiled FMBE scene (content.fmbeDsl)",
+});
+registerVerb("display move", { pos: [req("ident")], kw: { to: req("coord"), over: req("dur"), ease }, durationKw: "over", doc: "move a display to a world coordinate (client-side within ~4 blocks, otherwise the entity glides)" });
+registerVerb("display rotate", { pos: [req("ident")], kw: { to: req("coord"), over: req("dur"), ease, loop: { type: "ident", enum: ["none", "repeat", "pingpong"] } }, durationKw: "over", doc: "rotate to (x, y, z) degrees; any angle (720 = two turns) is exact" });
+registerVerb("display spin", { pos: [req("ident")], kw: { by: req("num"), over: req("dur"), ease }, durationKw: "over", doc: "turn about the vertical axis by <by> degrees" });
+registerVerb("display scale", { pos: [req("ident")], kw: { to: req("num"), over: req("dur"), ease }, durationKw: "over" });
+registerVerb("display item", { pos: [req("ident"), req("str")], doc: "swap what the display shows" });
+registerVerb("display play", { pos: [req("ident"), req("str")], doc: "run a named animation of a scene display" });
+registerVerb("display stop", { pos: [req("ident"), req("str")], doc: "freeze a named animation of a scene display" });
+registerVerb("display hide", { pos: [req("ident")] });
 registerVerb("particles", { pos: [req("str")], kw: { at: req("coord"), radius: "num", count: "num", for: "dur" }, durationKw: "for" });
 registerVerb("sound", { pos: [req("str")], kw: { at: "coord", volume: "num", pitch: "num" } });
 registerVerb("title", { pos: [req("str")], kw: { subtitle: "str", for: "dur", fade: "dur" }, durationKw: "for" });
@@ -68,7 +91,6 @@ registerVerb("call", { pos: [req("str")], doc: "invoke a registered script funct
 registerVerb("emit", { pos: [req("str")], doc: "emit a named script event" });
 registerVerb("mark_seen", { pos: [req("str")], doc: "mark a cutscene id as seen for the player" });
 registerVerb("camera dolly", { kw: { by: req("coord"), over: req("dur") }, durationKw: "over" });
-registerVerb("camera roll", { pos: [req("num")], kw: { over: "dur", ease }, durationKw: "over" });
 registerVerb("weather", { pos: [{ type: "ident", enum: ["clear", "rain", "thunder"], required: true }] });
 registerVerb("time", { pos: [req("num")] });
 registerVerb("clear_effects", {});

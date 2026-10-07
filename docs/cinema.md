@@ -1,93 +1,83 @@
-# Crystal Cinema Language Reference
+# Crystal Cinema
 
-Crystal Cinema is a declarative, chronological, line-based DSL for authoring cutscenes in Bedrock mods. Files are stored as `*.cinema` plain text and compiled into executable timelines by `content.cinemaDsl` in the build pipeline.
+Crystal Cinema is a declarative, chronological, line-based DSL for authoring cutscenes in Bedrock mods. Files are `*.cinema` plain text, compiled into timelines by `content.cinemaDsl` in the build pipeline and played by the `@openrock/cinema` runtime (real Bedrock handlers for every verb, FMBE display entities included). CLI: `openrock cinema check|preview [modDir]`.
 
-## Time Model
+## Time model
 
 A cutscene progresses on a **cursor** that starts at 0 ticks (one tick = 1/20 second):
-- `wait <duration>` advances the cursor by that duration
-- `at <time>` or `at +<time>` sets the cursor absolutely (to tick T) or relatively (forward by T)
-- Events fire when the cursor reaches their timestamp; events at the same tick run in source order
-- `sequence { ... }` runs its children in order from the cursor, advancing it
-- `parallel { ... }` starts every child at the same cursor; afterwards the cursor is the latest END time
-- Timed commands (with `over` or `for`) count their duration toward the timeline's total, but do not block the cursor
 
-Time may never go backwards except within a `parallel` block. Every cutscene must end with `unlock` so control is always returned.
+- `wait <duration>` advances the cursor.
+- `at <time>` / `at +<time>` sets the cursor absolutely / advances it relatively. Going backwards is an error outside `parallel`.
+- Events at the same tick run in source order.
+- `sequence { ... }` runs children in order from the cursor, advancing it.
+- `parallel { ... }` starts every child at the same cursor; afterwards the cursor is the latest END among the children.
+- Timed commands (`over` / `for`) **never block the cursor** - they start now and run alongside later lines - but count toward the cutscene's total length. Put a `wait` after them to sequence what follows.
 
-## Cutscene Structure
+Durations need a unit: `1.5s`, `500ms`, `20t`.
+
+## Structure
 
 ```
 cutscene "id" {
-  cast  <name> = player | entity "type" at (x, y, z)
-  
-  mode  none | letterbox | fade-in
-  
+  cast  <name> = player [index] | entity "type" at (x, y, z)
+  mode  none | letterbox
   lock  cinematic | position | free
-  
-  # timeline events
-  
-  unlock
-  
-  on skip { ... }
+  ...timeline...
+  unlock                       # required: every cutscene hands control back
+  on skip { ... }              # runs instead of the rest when the player skips
 }
 ```
 
-## Durations
-
-Durations must have a unit:
-- `1.5s` – seconds (converted to ticks)
-- `500ms` – milliseconds
-- `20t` – ticks (1/20 second each)
-
-## Cast Declaration
-
-Each cast is a named reference to a game actor:
-- `player [0]` — bound at play time; optional player index (default 0)
-- `entity "type" at (x, y, z)` — spawned at the given coordinate
+`cast player [n]` binds the n-th player given to `play` (default 0). `cast entity` is spawned when the cutscene starts and **always removed when it ends**.
 
 ## Verbs
 
 | Verb | Arguments | Notes |
 |------|-----------|-------|
-| `lock` | `cinematic` \| `position` \| `free` | Camera/movement lock mode |
-| `unlock` | — | Release locks, restore control |
-| `mode` | `none` \| `letterbox` \| `fade-in` | Screen mode |
-| `fade` | `in` \| `out`, `<duration>` | Fade screen |
-| `camera cut` | `to <coord>`, opt `look_at <target>`, opt `fov <num>` | Instant camera placement |
-| `camera move` | `to <coord>`, `over <duration>`, opt `ease <name>`, opt `look_at <target>` | Animated move (blocking) |
-| `camera look_at` | `<target>`, opt `over <duration>`, opt `ease <name>` | Rotate to face target |
-| `camera follow` | `<cast>` | Camera follows a cast |
-| `camera orbit` | `around <target>`, `radius <num>`, `speed <num>`, `over <duration>` | Orbit an entity (blocking) |
-| `camera shake` | `strength <num>`, `for <duration>` | Screen shake |
-| `camera fov` | `<num>`, opt `over <duration>`, opt `ease <name>` | Field of view (blocking) |
-| `camera pan_up` | opt `over <duration>`, opt `ease <name>` | Pan away from ground (blocking) |
-| `camera dolly` | `by <coord>`, `over <duration>` | Relative camera translation (blocking) |
-| `camera roll` | `<num>`, opt `over <duration>`, opt `ease <name>` | Roll the camera (blocking) |
-| `screen show` | `"texture"`, opt `fill`, opt `fade <duration>` | Show full-screen or overlay |
-| `screen hide` | opt `fade <duration>` | Hide screen |
-| `spawn_display` | `"entity"`, opt `at screen(x, y)`, opt `for <duration>` | Spawn display entity |
-| `particles` | `"effect"`, opt `at <coord>`, opt `radius <num>`, opt `count <num>`, opt `for <duration>` | Play particles |
-| `sound` | `"sound"`, opt `at <coord>`, opt `volume <num>`, opt `pitch <num>` | Play sound |
-| `title` | `"text"`, opt `subtitle "text"`, opt `for <duration>`, opt `fade <duration>` | Show title/subtitle |
-| `weather` | `clear` \| `rain` \| `thunder` | Change weather |
-| `time` | `<num>` | Set world time |
-| `clear_effects` | — | Remove all effects |
-| `give_effect` | `"effect"`, opt `for <duration>`, opt `level <num>` | Apply status effect |
-| `teleport_player` | `<coord>` | Teleport player |
-| `heal` | — | Full heal |
-| `set_flag` | `"name"` | Set a custom flag |
-| `call` | `"function"` | Invoke a script function |
-| `emit` | `"event"` | Emit a script event |
-| `mark_seen` | `"id"` | Mark cutscene as seen |
-| `actor.play` | `"animation"`, opt `loop` | Play entity animation |
-| `actor.say` | `"text"`, opt `for <duration>` | Actor dialogue |
-| `actor.emote` | `"emote"` | Play emote |
-| `actor.teleport` | `<coord>` | Teleport actor |
-| `actor.face` | `<target>` | Face toward target |
-| `actor.move` | `<coord>`, `over <duration>` | Move actor (blocking) |
-| `actor.despawn` | — | Remove actor |
+| `lock` | `cinematic` \| `position` \| `free` | cinematic = camera + movement locked; position/free = movement locked, camera free. Permissions are restored to what they were, on every exit path |
+| `unlock` | | release locks and the camera |
+| `mode` | `none` \| `letterbox` | bars are drawn by the game (`hooks.letterbox`) |
+| `fade` | `in` \| `out`, `<dur>` | out = to black (held until `fade in`); in = from black |
+| `camera cut` | `to <coord>`, `look_at <target>`, `fov <n>` | instant |
+| `camera move` | `to <coord>`, `over <dur>`, `ease`, `look_at` | eased on the client; keeps the last look-at |
+| `camera look_at` | `<target>`, `over`, `ease` | turn in place |
+| `camera follow` | `<cast>` | keep facing a cast member (re-aimed every 2 ticks) until the next camera instruction |
+| `camera orbit` | `around <target>`, `radius`, `speed`, `over <dur>` | circle at the current height; default one turn per duration |
+| `camera shake` | `strength <n>`, `for <dur>` | `camera.addShake` (max intensity 4) |
+| `camera fov` | `<n>`, `over`, `ease` | |
+| `camera pan_up` | `over`, `ease` | tilt to look at the sky |
+| `camera dolly` | `by <coord>`, `over <dur>` | relative translation |
+| `screen show` / `screen hide` | `"texture"`, `fill`, `fade` | UI belongs to the game: `hooks.screenShow/screenHide` |
+| `display show` | `<name> <block\|block2d\|item> "<id>" at <coord>`, `rot`, `scale`, `base`, `system`, `for` | FMBE display entity ([fmbe.md](fmbe.md)) |
+| `display scene` | `<name> "<scene>" at <coord>`, `yaw`, `scale`, `for` | a compiled `content.fmbeDsl` scene |
+| `display move` | `<name> to <coord> over <dur>`, `ease` | client-side within ~3.5 blocks, otherwise the entity glides |
+| `display rotate` | `<name> to <x,y,z> over`, `ease`, `loop` | any angle is exact |
+| `display spin` | `<name> by <degrees> over`, `ease` | `by 720` = two turns |
+| `display scale` | `<name> to <n> over`, `ease` | |
+| `display item` | `<name> "<id>"` | swap what it shows |
+| `display play` / `display stop` | `<name> "<animation>"` | scene animations |
+| `display hide` | `<name>` | |
+| `particles` | `"effect"`, `at`, `radius`, `count`, `for` | `count` once, or spread over `for` |
+| `sound` | `"sound"`, `at`, `volume`, `pitch` | |
+| `title` | `"text"`, `subtitle`, `for`, `fade` | cleared on cleanup |
+| `weather` | `clear` \| `rain` \| `thunder` | |
+| `time` | `<ticks>` | `world.setTimeOfDay` |
+| `give_effect` / `clear_effects` | `"effect"`, `for`, `level` | level 1 = I |
+| `teleport_player` | `<coord>` | |
+| `heal` | | |
+| `call` | `"function"` | `functions[name](env, players)` |
+| `emit` | `"event"` | `emit(name, { players })` |
+| `mark_seen` / `set_flag` | `"id"` | `hooks.markSeen` / `hooks.setFlag` |
+| `<cast>.play` | `"animation"`, `loop` | `entity.playAnimation` |
+| `<cast>.say` | `"text"`, `for` | `hooks.say`, else the action bar |
+| `<cast>.emote` | `"event"` | `entity.triggerEvent` - the entity decides |
+| `<cast>.teleport` / `.face` / `.move` / `.despawn` | | `.move` glides linearly, one teleport per tick |
 
-Ease functions: `linear`, `in`, `out`, `inOut`, `inSine`, `outSine`, `inOutSine`, `inQuad`, `outQuad`, `inOutQuad`, `inCubic`, `outCubic`, `inOutCubic`.
+Ease names: `linear`, `in`, `out`, `inOut` (the quad curves), `inSine`, `outSine`, `inOutSine`, `inQuad`, `outQuad`, `inOutQuad`, `inCubic`, `outCubic`, `inOutCubic`.
+
+There is no camera roll (the script API has no roll), and no screen-space displays: a display is a world entity. Use `display show` at a coordinate in front of a locked camera.
+
+A display name is introduced by `display show` / `display scene`; every other `display` verb must name one that is shown (checked at compile time), and `for` hides it again. Hiding twice is fine.
 
 ## Example
 
@@ -97,23 +87,23 @@ cutscene "first_meeting" {
   cast mira = entity "openchara:mira" at (120, 64, -30)
   mode letterbox
   lock cinematic
-  
+
   camera cut to (118, 66, -25) look_at mira
   wait 1.5s
   camera move to (118, 65, -29) over 3s ease inOutSine look_at mira
   mira.play "wave"
   wait 2s
+  display show gem item "minecraft:diamond" at (119, 66, -27) scale 0.6
+  display spin gem by 720 over 4s ease inOutSine
+  display move gem to (119, 67, -27) over 2s ease outSine
   camera pan_up over 0.6s ease in
-  screen show "space_bg" fill fade 0.3s
-  spawn_display "big_robot" at screen(0.5, 0.4) for 3s
-  wait 3s
-  screen hide
-  camera cut to (140, 70, -10)
+  wait 4s
+  display hide gem
   particles "robot_slash" at (140, 64, -10) count 50 for 2s
   call "aoe_wave"
   fade out 0.5s
   unlock
-  
+
   on skip {
     fade out 0.2s
     mark_seen "first_meeting"
@@ -121,13 +111,34 @@ cutscene "first_meeting" {
 }
 ```
 
+## Running it (`@openrock/cinema`)
+
+```js
+import { world, system, InputPermissionCategory, EasingType, WeatherType, CameraShakeType, ItemStack, EnchantmentType } from "@minecraft/server";
+import { createCinemaRuntime } from "@openrock/cinema";
+import { createFmbe, spawnScene } from "@openrock/fmbe";
+import { CUTSCENES } from "@openrock/virtual/openrock-cinema-data";
+import { SCENES } from "@openrock/virtual/openrock-fmbe-data";
+
+const cinema = createCinemaRuntime({
+    bedrock: { world, system, InputPermissionCategory, EasingType, WeatherType, CameraShakeType },
+    cutscenes: CUTSCENES,
+    fmbe: createFmbe({ world, system, server: { ItemStack, EnchantmentType }, namespace: "mymod" }),
+    scenes: SCENES, spawnScene,
+    functions: { aoe_wave: (env, players) => { /* game code */ } },
+    hooks: { markSeen, setFlag, screenShow, screenHide, letterbox, say },   // all optional; see below
+    emit: (name, { players }) => { /* script event */ },
+});
+cinema.play("first_meeting", [player], { onFinish: ({ state }) => {} });   // state: finished | skipped | stopped | errored
+cinema.skip(player);
+```
+
+**The guarantee:** whatever a cutscene changes - input permissions (restored to the values they had, not blindly to `true`), camera, fov, shake, fade, title, overlay, letterbox, displays, cast entities - is undone exactly once on every exit: finish, skip, stop, an op that throws, the player leaving, the player dying, `stopAll()`. An error in one cutscene ends only that cutscene (`onError`).
+
+**What the library does itself** (against real `@minecraft/server`): lock/unlock, fade, every camera verb (`setCamera("minecraft:free", ...)` with client-side easing; follow/orbit step every 2 ticks), shake, fov, particles, sound, title, weather, time, effects, teleport, heal, actors, FMBE displays. **What it asks the game for** (`hooks`): letterbox bars, screen overlays, `markSeen`, `setFlag`, `say`. Missing cosmetic hooks (letterbox, screen) warn once and the cutscene continues; missing state-changing ones (`markSeen`, `setFlag`, `call` functions, `emit`) are errors.
+
+Unverified in game (no server can show it): how the free camera and its easing look, whether `actor play ... loop`'s never-firing stop expression loops, and `camera.setFov()` with no argument resetting the fov. The ops are checked against a recording fake of the API (`libs/cinema/test/ops.test.js`) and the compiler against `test/cinemaDsl.test.js`.
+
 ## Linting
 
-The compiler checks for warnings:
-- Cutscenes longer than 5 minutes
-- `lock free` (free-cam requires every angle looks good)
-- Consecutive `camera cut` at the same tick
-- `screen show` without a later `screen hide`
-- `particles` with count > 500
-
-Warnings print to the console but do not fail the build.
+Warnings (printed by the build and `openrock cinema check`, never failing it): longer than 5 minutes; `lock free`; consecutive `camera cut` at the same tick; `screen show` without a later `screen hide`; `particles` count over 500.

@@ -39,6 +39,7 @@ function compileCutscene(cutscene, { source, filename } = {}) {
     let locked = false;
     let hasSkipBlock = false;
     let maxEnd = 0;
+    const displays = new Map();   // display name -> "shown" | "hidden" (source order; FMBE displays, see docs/fmbe.md)
 
     function declareCast(stmt) {
         if (castNames.has(stmt.name)) fail(`cast "${stmt.name}" is declared twice`, stmt);
@@ -68,6 +69,18 @@ function compileCutscene(cutscene, { source, filename } = {}) {
         list.push(event);
         const dur = verb.durationKw && typeof args[verb.durationKw] === "number" ? args[verb.durationKw] : 0;
         return t + dur;
+    }
+
+    // `display show/scene <name> ...` introduces a display; every other display verb must name one that is shown.
+    function trackDisplay(stmt) {
+        if (!stmt.verb.startsWith("display ")) return;
+        const name = stmt.args.pos[0];
+        if (stmt.verb === "display show" || stmt.verb === "display scene") {
+            if (displays.get(name) === "shown") fail(`display "${name}" is already shown - \`display hide ${name}\` first, or use another name`, stmt);
+            displays.set(name, "shown");
+        } else if (!displays.has(name)) {
+            fail(`display "${name}" is not shown yet - add \`${"display show"} ${name} ...\` (or \`display scene\`) before this`, stmt);
+        } else if (stmt.verb === "display hide") displays.set(name, "hidden");
     }
 
     // Returns the cursor after running `body` starting at `start`; `end` is
@@ -111,6 +124,7 @@ function compileCutscene(cutscene, { source, filename } = {}) {
                     break;
                 case "cmd": {
                     checkRefs(stmt);
+                    trackDisplay(stmt);
                     if (stmt.verb === "lock") locked = stmt.args.pos[0] !== "none";
                     if (stmt.verb === "unlock") locked = false;
                     if (stmt.verb === "mode") mode = stmt.args.pos[0];

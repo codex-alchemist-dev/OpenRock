@@ -114,7 +114,7 @@ test("the full example from the plan parses and compiles", () => {
   wait 2s
   camera pan_up over 0.6s ease in
   screen show "space_bg" fill fade 0.3s
-  spawn_display "big_robot" at screen(0.5, 0.4) for 3s
+  display show robot block "minecraft:iron_block" at (140, 66, -10) scale 2 for 3s
   wait 3s
   screen hide
   camera cut to (140, 70, -10)
@@ -153,10 +153,9 @@ test("end-to-end: a mod with content.cinemaDsl bundles cutscenes into scripts/ma
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test("new verbs: camera dolly/roll, weather, time, clear_effects, give_effect, teleport_player, heal, set_flag parse and compile", () => {
+test("new verbs: camera dolly, weather, time, clear_effects, give_effect, teleport_player, heal, set_flag parse and compile", () => {
     const c = one(wrap(`lock cinematic
 camera dolly by (1, 2, 3) over 5s
-camera roll 45 over 2s ease linear
 weather rain
 time 18000
 clear_effects
@@ -175,7 +174,59 @@ unlock`));
     assert.ok(opNames.includes("heal"));
     assert.ok(opNames.includes("set_flag"));
     assert.ok(c.events.find(e => e.op === "camera.dolly")?.args.by);
-    assert.ok(c.events.find(e => e.op === "camera.roll")?.args.pos[0]);
+});
+
+test("display verbs: a display is introduced by show/scene and every other display verb must name a shown one", () => {
+    const c = one(wrap(`lock cinematic
+display show gem item "minecraft:diamond" at (1, 65, 1) rot (0, 45, 0) scale 0.5 system basic
+display move gem to (4, 66, 1) over 2s ease inOutSine
+display spin gem by 720 over 4s
+display rotate gem to (0, 90, 0) over 1s loop pingpong
+display scale gem to 2 over 1s
+display item gem "minecraft:emerald"
+display scene altar "altar" at (10, 64, 10) yaw 90 for 6s
+display play altar "spin"
+display stop altar "spin"
+display hide gem
+unlock`));
+    assert.deepStrictEqual(c.events.filter(e => e.op.startsWith("display.")).map(e => e.op), ["display.show", "display.move", "display.spin", "display.rotate", "display.scale", "display.item", "display.scene", "display.play", "display.stop", "display.hide"]);
+    const show = c.events.find(e => e.op === "display.show");
+    assert.deepStrictEqual(show.args.pos, ["gem", "item", "minecraft:diamond"]);
+    assert.deepStrictEqual([show.args.at, show.args.rot, show.args.scale, show.args.system], [[1, 65, 1], [0, 45, 0], 0.5, "basic"]);
+    assert.strictEqual(c.durationTicks, 120, "a scene shown `for 6s` counts toward the cutscene length");
+    throwsMsg(() => compile(wrap(`lock cinematic
+display move ghost to (0,0,0) over 1s
+unlock`)), /display "ghost" is not shown yet/);
+    throwsMsg(() => compile(wrap(`lock cinematic
+display show a block "x:y" at (0,0,0)
+display show a block "x:y" at (1,0,0)
+unlock`)), /already shown/);
+    throwsMsg(() => compile(wrap(`lock cinematic
+display show a wall "x:y" at (0,0,0)
+unlock`)), /not valid.*block, block2d, item/s);
+    assert.ok(compile(wrap(`lock cinematic
+display show a block "x:y" at (0,0,0)
+display hide a
+display show a block "x:y" at (0,0,0)
+unlock`)), "reusing a name after hide is fine");
+});
+
+test("removed verbs stay removed: roll has no Bedrock camera API, spawn_display became `display show`", () => {
+    throwsMsg(() => compile(wrap(`lock cinematic
+camera roll 45 over 2s
+unlock`)), /unknown command/);
+    throwsMsg(() => compile(wrap(`lock cinematic
+spawn_display "x" at screen(0.5, 0.4)
+unlock`)), /unknown command/);
+});
+
+test("docs/cinema.md mentions every registered verb", () => {
+    const { allVerbs } = require("../src/cinemaDsl/verbs.js");
+    const doc = fs.readFileSync(path.join(__dirname, "..", "docs", "cinema.md"), "utf8");
+    for (const v of allVerbs()) {
+        const needle = v.name.startsWith("actor ") ? `.${v.name.slice(6)}` : v.name;
+        assert.ok(doc.includes(needle) || (v.name.startsWith("display ") && doc.includes(v.name.slice(8))) || (v.name.startsWith("camera ") || v.name.startsWith("screen ")) && doc.includes(v.name.split(" ")[1]), `verb "${v.name}" is not documented`);
+    }
 });
 
 test("lint: warns on long cutscene, lock free, consecutive camera cuts, unpaired screen show, high particle count", () => {
