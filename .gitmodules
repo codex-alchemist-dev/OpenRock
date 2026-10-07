@@ -124,3 +124,6 @@
 [submodule "libs/input"]
 	path = libs/input
 	url = https://github.com/codex-alchemist-dev/OpenRock-Input.git
+[submodule "libs/fmbe"]
+	path = libs/fmbe
+	url = https://github.com/codex-alchemist-dev/OpenRock-FMBE.git
