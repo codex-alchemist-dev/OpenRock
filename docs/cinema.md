@@ -75,7 +75,7 @@ cutscene "id" {
 | `<cast>.emote` | `"event"` | `entity.triggerEvent` - the entity decides |
 | `<cast>.teleport` / `.face` / `.move` / `.despawn` | | `.move` glides linearly, one teleport per tick |
 
-Ease names: `linear`, `in`, `out`, `inOut` (the quad curves), `inSine`, `outSine`, `inOutSine`, `inQuad`, `outQuad`, `inOutQuad`, `inCubic`, `outCubic`, `inOutCubic`.
+Ease names: `linear`, `in`, `out`, `inOut` (the quad curves), and `in`/`out`/`inOut` + `Sine Quad Cubic Quart Quint Expo Circ Back Elastic Bounce` (e.g. `outBounce`, `inOutBack`).
 
 There is no camera roll (the script API has no roll), and no screen-space displays: a display is a world entity. Use `display show` at a coordinate in front of a locked camera.
 

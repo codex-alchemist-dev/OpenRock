@@ -76,11 +76,17 @@ g.tween({ rot: [0, 360, 0] }, { ticks: 80, loop: "repeat" });   // a turntable
 ```
 
 Transforms compose through the advanced system's own rotation matrix (`matrix.cjs`; `R = Ry(-y) Rx(x) Rz(-z)`, checked
-against the wiki's `v.F.r0..r8` in the tests). **Yaw rotations are exact for any angle and any loop**: each descendant's position
-and rotation become Molang formulas of the group's animated yaw, so children travel on true circles (tested against
-`composeTransforms` at five instants). Tilting rotations animate as straight pieces (one per 90 degrees) and cannot loop. Because an
-offset is only reliable within a few blocks of its entity, children re-anchor as the group moves (`maxOffset`, default 4); a sweep
-too wide for FMBE throws instead of silently vanishing.
+against the wiki's `v.F.r0..r8` in the tests).
+
+**Animations compose.** Any number of channels (`pos`, `rot`, `scale`) of any groups and displays can animate at the same time,
+each with its own duration, easing and loop - a bobbing platform carrying a spinning ring carrying a pulsing gem is three
+`tween` calls. While anything animates, the whole tree becomes client-side Molang (`groupFormulas.js`): every display's world
+position, yaw and scale is a formula of the animation clocks, composed symbolically down the tree. This is exact for any angle
+and any loop as long as group rotations are about the vertical axis (yaw) - the test evaluates the generated Molang at five
+instants and compares it with `composeTransforms` of the sampled values. A tilting group rotation (pitch/roll) cannot be
+expressed that way; it animates as straight pieces (one per 90 degrees), cannot loop, and needs nothing else animating.
+Because an offset is only reliable within a few blocks of its entity, displays re-anchor as needed; a motion too wide for FMBE
+throws instead of silently vanishing (`maxOffset`, default 4).
 
 If in-game the angles act as the transpose of this convention (children of a pitched/rolled group compose in the wrong
 order), pass `handedness: -1` to the group; yaw-only groups do not depend on it.

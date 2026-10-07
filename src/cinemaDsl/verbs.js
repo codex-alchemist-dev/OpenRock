@@ -9,7 +9,9 @@
 // A spec is either a bare type string or { type, enum?, required? }.
 "use strict";
 
-const EASES = ["linear", "in", "out", "inOut", "inSine", "outSine", "inOutSine", "inQuad", "outQuad", "inOutQuad", "inCubic", "outCubic", "inOutCubic"];
+// linear, the bare in/out/inOut (quad), and every family the camera API and @openrock/fmbe share
+const FAMILIES = ["Sine", "Quad", "Cubic", "Quart", "Quint", "Expo", "Circ", "Back", "Elastic", "Bounce"];
+const EASES = ["linear", "in", "out", "inOut", ...FAMILIES.flatMap(f => ["in", "out", "inOut"].map(m => m + f))];
 
 const VERBS = new Map();
 
