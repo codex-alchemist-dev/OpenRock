@@ -68,6 +68,7 @@ const { compileBlockDsl } = require("./blockDsl/blockCompiler.js");
 const { compileItemDsl } = require("./itemDsl/itemCompiler.js");
 const { compileCinemaDsl } = require("./cinemaDsl/cinemaCompiler.js");
 const { compileFmbeDsl } = require("./fmbeDsl/fmbeCompiler.js");
+const { linkRefs } = require("./crystal/refs.js");
 const { compileLocalization } = require("../libs/localization/src/emit.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
@@ -372,7 +373,7 @@ function assertNotNativeOnlyPath(manifestName, outRel) {
  * createIncrementalBuild()'s rebuild() (called for just the one entry that
  * owns a changed file).
  */
-function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi, rootManifest = null, rootDir = null, packages = []) {
+function renderEntryContent({ manifest, dir: entryDir }, { bp, rp, link }, datagenApi, rootManifest = null, rootDir = null, packages = []) {
     const vars = computeVars(manifest, entryDir, rootManifest, rootDir, packages);
     const content = manifest.content ?? {};
 
@@ -455,6 +456,7 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp }, datagenApi,
             if (!bp && !allowWithoutBehavior) continue;
             const dslDirAbs = path.resolve(entryDir, content[contentField]);
             const output = compile(dslDirAbs, { vars });
+            if (link) { link.refs.push(...(output.refs ?? [])); link.defs.push(...(output.defs ?? [])); }
             if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), fillDoc(doc, vars));
             if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), fillDoc(doc, vars));
         }
@@ -588,10 +590,13 @@ function buildMod(modDir, opts = {}) {
     const bp = plan.hasBehaviorPack ? new Map() : null;
     const rp = new Map();
 
-    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
+    const link = { refs: [], defs: [] };
+    for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp, link }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
 
     const lintIssues = runEntityLints({ bp, rp });
     layerOverSource([bp, rp]);
+    // Crystal Refs (`@ns:name`): every reference any Crystal language read must name something the finished pack defines.
+    linkRefs({ refs: link.refs, defs: link.defs, pack: { bp, rp }, namespaces: plan.ordered.map(e => e.manifest.namespace ?? plan.modManifest.namespace).filter(Boolean) });
     injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
     if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
@@ -810,9 +815,12 @@ function createIncrementalBuild(modDir, opts = {}) {
         plan = resolveBuildPlan(modDir, opts);
         bp = plan.hasBehaviorPack ? new Map() : null;
         rp = new Map();
-        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
+        const link = { refs: [], defs: [] };
+        for (const entry of plan.ordered) renderEntryContent(entry, { bp, rp, link }, plan.datagenApi, plan.modManifest, plan.dir, plan.ordered);
         const lintIssues = runEntityLints({ bp, rp });
         layerOverSource([bp, rp]);
+        // (incremental single-file rebuilds do not re-link; every full build, including the periodic safety-net one, does)
+        linkRefs({ refs: link.refs, defs: link.defs, pack: { bp, rp }, namespaces: plan.ordered.map(e => e.manifest.namespace ?? plan.modManifest.namespace).filter(Boolean) });
     injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
         if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));

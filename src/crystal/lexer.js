@@ -11,6 +11,7 @@
 //   durations    a number followed by s / ms / t: 1.5s  250ms  20t  (always normalised to ticks, 20 per second)
 //   identifiers  letters, digits and _ ; plus . and - inside (so `actor.play` and `in-out` are one word)
 //   statements   end at a newline or a `;` - both mean the same, so several statements may share a line
+//   references   @ns:name  or  @:name (the project's own namespace) - a Crystal Ref, checked at build time (see refs.js)
 //   punctuation  chosen by the language (parens, braces, commas, ...)
 //
 // Tokens carry 1-based line/col. The string/number/comment rules are checked against TypeScript's own scanner in
@@ -98,6 +99,7 @@ function lex(source, { filename, punct = {}, hashComments = true } = {}) {
 
     const NUMBER = /^(?:0[xX][0-9a-fA-F][0-9a-fA-F_]*|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d[\d_]*)?)/;
     const IDENT = /^[A-Za-z_][A-Za-z0-9_.-]*/;
+    const REF = /^@([A-Za-z_][A-Za-z0-9_-]*)?:([A-Za-z_][A-Za-z0-9_.\/-]*)/;
 
     while (i < source.length) {
         const ch = source[i];
@@ -134,6 +136,13 @@ function lex(source, { filename, punct = {}, hashComments = true } = {}) {
             const unit = /^(ms|s|t)(?![A-Za-z0-9_])/.exec(source.slice(i, i + 3));
             if (unit) { push("DUR", Math.round(value * UNIT_TICKS[unit[1]]), startPos, startLine, startLineStart); i += unit[0].length; }
             else push("NUM", value, startPos, startLine, startLineStart);
+            continue;
+        }
+        if (ch === "@") {
+            const ref = REF.exec(source.slice(i, i + 160));
+            if (!ref) fail("a Crystal reference is written @namespace:name, or @:name for this project's namespace");
+            push("REF", { ns: ref[1] ?? null, name: ref[2] }, i, line, lineStart);
+            i += ref[0].length;
             continue;
         }
         if (punct[ch]) { push(punct[ch], ch, i, line, lineStart); i++; continue; }

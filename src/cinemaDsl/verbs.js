@@ -5,7 +5,7 @@
 // (here, or from a library via registerVerb) never touches them.
 //
 // Value types: "num" | "dur" | "str" | "ident" | "coord" |
-// "target" (a cast name or a coord) | "flag" (keyword with no value).
+// "ref" ({kind}: an `@ns:name` Crystal Ref or a string), "target" (a cast name or a coord) | "flag" (keyword with no value).
 // A spec is either a bare type string or { type, enum?, required? }.
 "use strict";
 
@@ -47,6 +47,8 @@ function matchVerb(words) {
 
 const ease = { type: "ident", enum: EASES };
 const req = type => ({ type, required: true });
+// A reference slot takes `@ns:name` (checked at build time against what the project defines) or, for old files, a plain string.
+const ref = (kind, required = true) => ({ type: "ref", kind, required });
 
 registerVerb("lock", { pos: [{ type: "ident", enum: ["cinematic", "position", "free"], required: true }], doc: "cinematic = camera+movement locked; position = movement locked, rotation free (360); free = free-cam, creator beware" });
 registerVerb("unlock", { doc: "release camera and movement locks, restore control" });
@@ -67,13 +69,13 @@ registerVerb("screen hide", { kw: { fade: "dur" } });
 // coordinates, `rot` is degrees (x, y, z), `scale` 1 = a full block.
 const KINDS = ["block", "block2d", "item"];
 registerVerb("display show", {
-    pos: [req("ident"), { type: "ident", enum: KINDS, required: true }, req("str")],
+    pos: [req("ident"), { type: "ident", enum: KINDS, required: true }, ref("blockOrItem")],
     kw: { at: req("coord"), rot: "coord", scale: "num", base: "coord", system: { type: "ident", enum: ["advanced", "basic", "static"] }, for: "dur" },
     durationKw: "for",
     doc: "show <name> <block|block2d|item> \"<id>\" at <coord> [rot] [scale] [base] [system] [for]: spawn a display; `for` removes it again",
 });
 registerVerb("display scene", {
-    pos: [req("ident"), req("str")],
+    pos: [req("ident"), ref("scene")],
     kw: { at: req("coord"), yaw: "num", scale: "num", for: "dur" },
     durationKw: "for",
     doc: "scene <name> \"<scene id>\" at <coord> [yaw] [scale] [for]: spawn a compiled FMBE scene (content.fmbeDsl)",
@@ -82,12 +84,12 @@ registerVerb("display move", { pos: [req("ident")], kw: { to: req("coord"), over
 registerVerb("display rotate", { pos: [req("ident")], kw: { to: req("coord"), over: req("dur"), ease, loop: { type: "ident", enum: ["none", "repeat", "pingpong"] } }, durationKw: "over", doc: "rotate to (x, y, z) degrees; any angle (720 = two turns) is exact" });
 registerVerb("display spin", { pos: [req("ident")], kw: { by: req("num"), over: req("dur"), ease }, durationKw: "over", doc: "turn about the vertical axis by <by> degrees" });
 registerVerb("display scale", { pos: [req("ident")], kw: { to: req("num"), over: req("dur"), ease }, durationKw: "over" });
-registerVerb("display item", { pos: [req("ident"), req("str")], doc: "swap what the display shows" });
+registerVerb("display item", { pos: [req("ident"), ref("blockOrItem")], doc: "swap what the display shows" });
 registerVerb("display play", { pos: [req("ident"), req("str")], doc: "run a named animation of a scene display" });
 registerVerb("display stop", { pos: [req("ident"), req("str")], doc: "freeze a named animation of a scene display" });
 registerVerb("display hide", { pos: [req("ident")] });
-registerVerb("particles", { pos: [req("str")], kw: { at: req("coord"), radius: "num", count: "num", for: "dur" }, durationKw: "for" });
-registerVerb("sound", { pos: [req("str")], kw: { at: "coord", volume: "num", pitch: "num" } });
+registerVerb("particles", { pos: [ref("particle")], kw: { at: "coord", radius: "num", count: "num", for: "dur" }, durationKw: "for" });
+registerVerb("sound", { pos: [ref("sound")], kw: { at: "coord", volume: "num", pitch: "num" } });
 registerVerb("title", { pos: [req("str")], kw: { subtitle: "str", for: "dur", fade: "dur" }, durationKw: "for" });
 registerVerb("call", { pos: [req("str")], doc: "invoke a registered script function by name" });
 registerVerb("emit", { pos: [req("str")], doc: "emit a named script event" });
@@ -101,7 +103,7 @@ registerVerb("teleportPlayer", { pos: [req("coord")] });
 registerVerb("heal", {});
 registerVerb("setFlag", { pos: [req("str")] });
 
-registerVerb("actor play", { actor: true, pos: [req("str")], kw: { loop: "flag" } });
+registerVerb("actor play", { actor: true, pos: [ref("animation")], kw: { loop: "flag" } });
 registerVerb("actor say", { actor: true, pos: [req("str")], kw: { for: "dur" }, durationKw: "for" });
 registerVerb("actor emote", { actor: true, pos: [req("str")] });
 registerVerb("actor teleport", { actor: true, pos: [req("coord")] });

@@ -28,6 +28,8 @@ Keywords are camelCase (`lookAt`, `panUp`, `giveEffect`, `clearEffects`, `telepo
 
 **Relative coordinates:** any coordinate component may be `~` (the cutscene's start), `~3` or `~-2`: `(~2, ~, ~-4)` is 2 east and 4 north of where the first player stood when it began (their floored position; world axes, no rotation). That makes a cutscene reusable anywhere. Plain numbers stay absolute, and the two mix: `(100, ~1, ~)`.
 
+**References:** wherever a verb names a thing - a cast entity, `sound`, `particles`, `<cast>.play`, `display scene`, `display show`/`item` - write a Crystal Ref (`@:mira`, `@minecraft:endrod`). It is checked at build time against what your project defines ([crystal.md](crystal.md#crystal-refs-the-part-that-is-only-crystal)); a quoted string still works, unchecked.
+
 ## Structure
 
 ```

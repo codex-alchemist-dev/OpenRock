@@ -20,14 +20,16 @@
 const { lex } = require("../crystal/lexer.js");
 const { CrystalSyntaxError } = require("../crystal/errors.js");
 const { textOf } = require("../crystal/text.js");
+const { resolveRef } = require("../crystal/refs.js");
 
 const PUNCT = { "(": "LPAREN", ")": "RPAREN", "{": "LBRACE", "}": "RBRACE", ",": "COMMA" };
 
 const KINDS = ["block", "block2d", "item"];
 const LEGACY_PROPS = { scalexz: "scaleXZ", scaley: "scaleY" };
 
-function parse(source, filename) {
+function parse(source, filename, { ns = null } = {}) {
     const tokens = lex(source, { filename, punct: PUNCT });
+    const links = [];
     let p = 0;
     const peek = (o = 0) => tokens[p + o];
     const next = () => tokens[p++];
@@ -40,6 +42,17 @@ function parse(source, filename) {
         if (t.type !== "NEWLINE" && t.type !== "EOF" && t.type !== "RBRACE") fail(`unexpected ${describe(t)} - expected end of line`);
         if (t.type === "NEWLINE") p++;
     };
+    /** A block/item id: `@ns:name` (a checked Crystal Ref) or a quoted string. */
+    function itemId(what) {
+        const t = peek();
+        if (t.type === "STR") return next().value;
+        if (t.type !== "REF") return fail(`expected ${what}: @namespace:name or a quoted id, but found ${describe(t)}`);
+        next();
+        let r;
+        try { r = resolveRef(t.value, "blockOrItem", ns); } catch (e) { return fail(e.message, t); }
+        links.push({ kind: "blockOrItem", ns: r.ns, id: r.id, file: filename ?? null, line: t.line, col: t.col, source });
+        return r.value;
+    }
     const isWord = (t, w) => t.type === "IDENT" && t.value === w;
 
     /** A number, optionally with `px` (1/16 block), or a quoted Molang expression (a client-side formula). */
@@ -110,7 +123,7 @@ function parse(source, filename) {
         const name = expect("IDENT", "a name for the display").value;
         const kind = expect("IDENT", `a kind (${KINDS.join(", ")})`);
         if (!KINDS.includes(kind.value)) fail(`"${kind.value}" is not a display kind - use one of: ${KINDS.join(", ")}`, kind);
-        const item = expect("STR", "the block or item id in quotes, like \"minecraft:stone\"").value;
+        const item = itemId("the block or item");
         const pr = props(DISPLAY_PROPS, "a display");
         endStatement();
         return { type: "display", name, kind: kind.value, item, props: pr, line: head.line, col: head.col };
@@ -142,7 +155,7 @@ function parse(source, filename) {
             else if (k.value === "scale") { next(); channels.scale = number({ pxOk: false }); sawChannel = true; }
             else if (k.value === "base") { next(); channels.basepos = vec3({ what: "a coordinate" }); sawChannel = true; }
             else if (k.value === "extend") { next(); channels.extend = PROP_PARSERS.extend(); sawChannel = true; }
-            else if (k.value === "item") { next(); channels.item = expect("STR", "an item id").value; sawChannel = true; }
+            else if (k.value === "item") { next(); channels.item = itemId("an item"); sawChannel = true; }
             else if (k.value === "over") { next(); opts.ticks = expect("DUR", "a duration like 2s, 20t or 500ms").value; }
             else if (k.value === "ease") { next(); opts.ease = expect("IDENT", "an easing name").value; }
             else if (k.value === "loop") { next(); opts.loop = expect("IDENT", "none, repeat or pingpong").value; }
@@ -191,7 +204,7 @@ function parse(source, filename) {
         scenes.push(scene());
         skipNewlines();
     }
-    return { scenes, warnings: tokens.warnings };
+    return { scenes, warnings: tokens.warnings, links };
 }
 
 module.exports = { parse, KINDS };

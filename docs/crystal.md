@@ -44,6 +44,46 @@ Adding a language to the family means lexing with `src/crystal/lexer.js` (passin
 `CrystalSyntaxError`, and registering a `DIRECTORY_DSLS` entry. Localization is not a Crystal language: it is spreadsheet/lang
 based and has no source syntax of its own.
 
+## Crystal Refs: the part that is only Crystal
+
+Everything in Crystal Core above also exists in TypeScript. This does not. A **Crystal Ref** names a *thing in your game* -
+`@namespace:name`, or `@:name` for "my project's own namespace" - and unlike a string it is **checked when the pack is built,
+across every Crystal language at once**.
+
+```cinema
+cutscene "intro" {
+  cast mira = entity @:mira at (~2, ~, ~)       // an entity written in the entity DSL
+  mira.play @:wave                               // an animation in your resource pack
+  sound @:meow                                   // a sound definition
+  particles @:spark at (~, ~, ~) count 20        // a particle
+  display scene altar @:shrine at (~4, ~, ~)     // a scene written in the FMBE DSL
+  display show gem item @minecraft:diamond at (~, ~2, ~)
+  ...
+}
+```
+
+Misspell one and the *build* stops, pointing at it:
+
+```
+2 unresolved Crystal references:
+intro.cinema:2:21: unknown entity @cw:mria - did you mean @cw:mira?
+   2 |   cast mira = entity @:mria at (~2, ~, ~)
+                           ^
+```
+
+- **Who defines what.** Entities, items and blocks come from the Crystal TSX dialects (and any pack JSON); particles, sounds
+  and animations from the resource pack; cutscenes and FMBE scenes from Crystal Cinema and Crystal FMBE. The build collects
+  every definition in the finished pack, so a reference links no matter which language - or which file - defined the thing.
+- **What is checked.** References into the project's own namespaces. `@minecraft:zombie` and other packs' ids pass through (their
+  definitions are not ours to see). A plain `"string"` still works in the same slot, unchecked - references are opt-in.
+- **`@:name`** resolves to `<namespace>:<name>`; animations follow Bedrock's convention, `@:wave` is `animation.<namespace>.wave`.
+  Cutscene and scene references carry the bare name at runtime (that is how they are looked up).
+- **Adding it to a language:** accept a `REF` token in the slots that name things, resolve it with `resolveRef`, and return the
+  `refs` you read and the `defs` you define from your compiler. The linker (`src/crystal/refs.js`) does the rest.
+
+Crystal TSX dialects keep using `{{ns}}`-style template variables in their strings; those work in every Crystal language's
+output too.
+
 ## Crystal TS
 
 The shared foundation every Crystal Manifest-* dialect below is built on:

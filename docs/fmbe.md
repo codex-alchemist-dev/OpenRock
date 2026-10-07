@@ -108,7 +108,7 @@ scene "altar" persist {
 }
 ```
 
-* **display** `<name> <block|block2d|item> "<id>"` then any of `at (x,y,z)` `rot (x,y,z)` `scale n` `base (x,y,z)` `scaleXZ n` `scaleY n` `system advanced|basic|static` `extend scale n xrot n yrot n` `var "v.name" <n|"molang">` `tag "t"` `name "n"`. `at`/`rot`/`scale` are local to the enclosing group. Numbers accept `px` (1/16 block); `base`, `scaleXZ`, `scaleY`, `extend` and `var` accept quoted Molang.
+* **display** `<name> <block|block2d|item> @ns:id` (a Crystal Ref, checked at build time, or a quoted "id") then any of `at (x,y,z)` `rot (x,y,z)` `scale n` `base (x,y,z)` `scaleXZ n` `scaleY n` `system advanced|basic|static` `extend scale n xrot n yrot n` `var "v.name" <n|"molang">` `tag "t"` `name "n"`. `at`/`rot`/`scale` are local to the enclosing group. Numbers accept `px` (1/16 block); `base`, `scaleXZ`, `scaleY`, `extend` and `var` accept quoted Molang.
 * **group** `<name> [at rot scale] { ... }` - nest freely.
 * **anim** `<name> on <display|group> tween <pos|rot|scale|base|extend|item ...> over <2s|20t|500ms> [ease <name>] [loop repeat|pingpong] [steps n] [auto]`. A group animation may only tween `pos rot scale`; `auto` starts it when the scene spawns.
 
