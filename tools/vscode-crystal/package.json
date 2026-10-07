@@ -1,0 +1,20 @@
+{
+  "name": "crystal-language",
+  "displayName": "Crystal (OpenRock)",
+  "description": "Syntax highlighting for the Crystal languages: .cinema cutscenes and .fmbe display scenes.",
+  "version": "0.1.0",
+  "publisher": "openrock",
+  "license": "MPL-2.0",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      { "id": "cinema", "aliases": ["Crystal Cinema"], "extensions": [".cinema"], "configuration": "./language-configuration.json" },
+      { "id": "fmbe", "aliases": ["Crystal FMBE"], "extensions": [".fmbe"], "configuration": "./language-configuration.json" }
+    ],
+    "grammars": [
+      { "language": "cinema", "scopeName": "source.crystal", "path": "./syntaxes/crystal.tmLanguage.json" },
+      { "language": "fmbe", "scopeName": "source.crystal", "path": "./syntaxes/crystal.tmLanguage.json" }
+    ]
+  }
+}

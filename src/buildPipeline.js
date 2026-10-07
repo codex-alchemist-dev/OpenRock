@@ -69,6 +69,7 @@ const { compileItemDsl } = require("./itemDsl/itemCompiler.js");
 const { compileCinemaDsl } = require("./cinemaDsl/cinemaCompiler.js");
 const { compileFmbeDsl } = require("./fmbeDsl/fmbeCompiler.js");
 const { linkRefs } = require("./crystal/refs.js");
+const { resolveDocRefs } = require("./crystal/docRefs.js");
 const { compileLocalization } = require("../libs/localization/src/emit.js");
 const { lintEntityDoc, lintClientEntityDoc, lintRenderControllerReferences } = require("./entityDsl/entityLint.js");
 const { checkScriptModulesCompleteness, scanEarlyExecutionCalls } = require("./scriptLint.js");
@@ -373,6 +374,25 @@ function assertNotNativeOnlyPath(manifestName, outRel) {
  * createIncrementalBuild()'s rebuild() (called for just the one entry that
  * owns a changed file).
  */
+/** Fills template variables in a directory-DSL output document and resolves its `"@:name"` Crystal Ref strings. */
+function finishDslDoc(outRel, doc, vars, link) {
+    const filled = fillDoc(doc, vars);
+    if (Buffer.isBuffer(filled)) return filled;
+    const file = fill(outRel, vars);
+    if (typeof filled === "string") {
+        // a JSON document the dialect already serialised: only touch it if it holds a quoted `"@...:..."` string
+        if (!file.endsWith(".json") || !/"@[A-Za-z0-9_-]*:/.test(filled)) return filled;
+        let parsed;
+        try { parsed = JSON.parse(filled); } catch (e) { return filled; }
+        const resolved = resolveDocRefs(parsed, { ns: vars.ns || null, file });
+        if (link) link.refs.push(...resolved.refs);
+        return JSON.stringify(resolved.doc, null, 2) + "\n";
+    }
+    const resolved = resolveDocRefs(filled, { ns: vars.ns || null, file });
+    if (link) link.refs.push(...resolved.refs);
+    return resolved.doc;
+}
+
 function renderEntryContent({ manifest, dir: entryDir }, { bp, rp, link }, datagenApi, rootManifest = null, rootDir = null, packages = []) {
     const vars = computeVars(manifest, entryDir, rootManifest, rootDir, packages);
     const content = manifest.content ?? {};
@@ -457,8 +477,10 @@ function renderEntryContent({ manifest, dir: entryDir }, { bp, rp, link }, datag
             const dslDirAbs = path.resolve(entryDir, content[contentField]);
             const output = compile(dslDirAbs, { vars });
             if (link) { link.refs.push(...(output.refs ?? [])); link.defs.push(...(output.defs ?? [])); }
-            if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), fillDoc(doc, vars));
-            if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), fillDoc(doc, vars));
+            // `"@:name"` strings in the documents the TSX dialects produce are Crystal Refs too (see crystal/docRefs.js)
+            const finish = (outRel, doc) => finishDslDoc(outRel, doc, vars, link);
+            if (bp) for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), finish(outRel, doc));
+            if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), finish(outRel, doc));
         }
     }
 }
@@ -596,13 +618,14 @@ function buildMod(modDir, opts = {}) {
     const lintIssues = runEntityLints({ bp, rp });
     layerOverSource([bp, rp]);
     // Crystal Refs (`@ns:name`): every reference any Crystal language read must name something the finished pack defines.
-    linkRefs({ refs: link.refs, defs: link.defs, pack: { bp, rp }, namespaces: plan.ordered.map(e => e.manifest.namespace ?? plan.modManifest.namespace).filter(Boolean) });
+    const linked = linkRefs({ refs: link.refs, defs: link.defs, pack: { bp, rp }, namespaces: plan.ordered.map(e => e.manifest.namespace ?? plan.modManifest.namespace).filter(Boolean) });
     injectPackStrings(plan.modManifest, [bp, rp]);
     renderManifestJson(plan, { bp, rp });
     if (plan.hasBehaviorPack) lintIssues.push(...renderScripts(plan, bp));
 
     assertNoLintIssues(plan.modManifest, lintIssues);
-    return { bp: stripVirtual(bp), rp, manifest: plan.modManifest };
+    // `crystal`: what the Crystal languages defined and referenced (used by `openrock refs`)
+    return { bp: stripVirtual(bp), rp, manifest: plan.modManifest, crystal: { refs: link.refs, known: linked.known } };
 }
 
 // Resolves which file, if any, is this package's own real in-game script
@@ -906,8 +929,8 @@ function createIncrementalBuild(modDir, opts = {}) {
                 if (rp) for (const staleKey of previous.rp) if (!freshRpKeys.has(staleKey)) rp.delete(staleKey);
                 directoryDslOutputKeys.set(target.dirAbs, { bp: freshBpKeys, rp: freshRpKeys });
 
-                for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), fillDoc(doc, vars));
-                if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), fillDoc(doc, vars));
+                for (const [outRel, doc] of Object.entries(output.bp ?? {})) putDirectoryDslEntry(bp, fill(outRel, vars), finishDslDoc(outRel, doc, vars, null));
+                if (rp) for (const [outRel, doc] of Object.entries(output.rp ?? {})) putDirectoryDslEntry(rp, fill(outRel, vars), finishDslDoc(outRel, doc, vars, null));
                 // Generated virtual script modules feed the bundle, so a
                 // change to one means the bundle itself must be re-rendered.
                 if ([...freshBpKeys, ...previous.bp].some(isVirtualKey)) {

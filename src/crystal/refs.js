@@ -14,7 +14,7 @@
 const { CrystalSyntaxError } = require("./errors.js");
 
 /** Kinds a reference slot can ask for. "blockOrItem" accepts either (an FMBE display shows both). */
-const KINDS = ["entity", "item", "block", "blockOrItem", "particle", "sound", "animation", "cutscene", "scene"];
+const KINDS = ["entity", "item", "block", "blockOrItem", "particle", "sound", "animation", "cutscene", "scene", "any"];
 /** Kinds whose runtime value is the bare name (cutscene and scene ids are not namespaced at runtime). */
 const BARE_VALUE = new Set(["cutscene", "scene"]);
 
@@ -81,6 +81,7 @@ class CrystalLinkError extends Error {
  * @param {Array<{kind: string, id: string}>} p.defs definitions the compilers reported (cutscenes, scenes, ...)
  * @param {{bp?: Map, rp?: Map}} p.pack the finished pack, scanned for entity/item/block/particle/sound/animation definitions
  * @param {Iterable<string>} p.namespaces the project's own namespaces; references elsewhere are not checked
+ * @returns {{checked: number, known: Map<string, Set<string>>}}
  * @throws {CrystalLinkError}
  */
 function linkRefs({ refs, defs = [], pack = {}, namespaces }) {
@@ -90,16 +91,16 @@ function linkRefs({ refs, defs = [], pack = {}, namespaces }) {
     const problems = [];
     for (const ref of refs) {
         if (!own.has(ref.ns)) continue;
-        const kinds = ref.kind === "blockOrItem" ? ["block", "item"] : [ref.kind];
+        const kinds = ref.kind === "blockOrItem" ? ["block", "item"] : ref.kind === "any" ? KINDS.filter(k => k !== "any" && k !== "blockOrItem") : [ref.kind];
         if (kinds.some(k => known.get(k)?.has(ref.id))) continue;
         const pool = kinds.flatMap(k => [...(known.get(k) ?? [])]);
         const hint = suggest(ref.id, pool);
         const where = ref.file ? `${ref.file}:${ref.line ?? 1}:${ref.col ?? 1}: ` : "";
         const frame = ref.source ? `\n${new CrystalSyntaxError("", ref.source, ref.line, ref.col, null).frame}` : "";
-        problems.push(`${where}unknown ${ref.kind === "blockOrItem" ? "block or item" : ref.kind} @${ref.ns}:${ref.id.replace(/^animation\.[^.]+\./, "").replace(/^[^:]+:/, "")}${hint ? ` - did you mean @${ref.ns}:${hint.replace(/^animation\.[^.]+\./, "").replace(/^[^:]+:/, "")}?` : ""}${frame}`);
+        problems.push(`${where}unknown ${ref.kind === "blockOrItem" ? "block or item" : ref.kind === "any" ? "thing" : ref.kind} @${ref.ns}:${ref.id.replace(/^animation\.[^.]+\./, "").replace(/^[^:]+:/, "")}${hint ? ` - did you mean @${ref.ns}:${hint.replace(/^animation\.[^.]+\./, "").replace(/^[^:]+:/, "")}?` : ""}${frame}`);
     }
     if (problems.length) throw new CrystalLinkError(problems);
-    return { checked: refs.filter(r => own.has(r.ns)).length };
+    return { checked: refs.filter(r => own.has(r.ns)).length, known };
 }
 
-module.exports = { KINDS, resolveRef, packDefs, linkRefs, CrystalLinkError, suggest };
+module.exports = { KINDS, BARE_VALUE, resolveRef, packDefs, linkRefs, CrystalLinkError, suggest };

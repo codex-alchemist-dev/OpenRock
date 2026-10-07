@@ -1,0 +1,97 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Crystal",
+  "scopeName": "source.crystal",
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.crystal",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.line.number-sign.deprecated.crystal",
+      "match": "#.*$"
+    },
+    {
+      "name": "comment.block.crystal",
+      "begin": "/*",
+      "end": "*/"
+    },
+    {
+      "name": "string.quoted.double.crystal",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.crystal",
+          "match": "\\(?:[nrtbfv0'\"`\\]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|u{[0-9a-fA-F]+})"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.crystal",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.crystal",
+          "match": "\\."
+        }
+      ]
+    },
+    {
+      "name": "string.template.crystal",
+      "begin": "`",
+      "end": "`",
+      "patterns": [
+        {
+          "name": "constant.character.escape.crystal",
+          "match": "\\."
+        },
+        {
+          "name": "invalid.illegal.interpolation.crystal",
+          "match": "${"
+        }
+      ]
+    },
+    {
+      "name": "entity.name.type.reference.crystal",
+      "match": "@[A-Za-z_][A-Za-z0-9_-]*?:[A-Za-z_][A-Za-z0-9_./-]*|@:[A-Za-z_][A-Za-z0-9_./-]*"
+    },
+    {
+      "name": "constant.numeric.duration.crystal",
+      "match": "(?<![w.])-?(?:d[d_]*(?:.[d_]*)?|.d[d_]*)(?:ms|s|t|px)\b"
+    },
+    {
+      "name": "constant.numeric.crystal",
+      "match": "(?<![w.])-?(?:0[xX][0-9a-fA-F_]+|(?:d[d_]*(?:.[d_]*)?|.d[d_]*)(?:[eE][+-]?d+)?)\b"
+    },
+    {
+      "name": "keyword.control.structure.crystal",
+      "match": "\b(?:anim|at|auto|cast|cutscene|display|ease|entity|group|loop|on|over|parallel|persist|player|scene|sequence|skip|steps|tween|wait)\b"
+    },
+    {
+      "name": "support.function.verb.crystal",
+      "match": "\b(?:actor|call|camera|clearEffects|cut|despawn|display|dolly|emit|emote|face|fade|follow|fov|giveEffect|heal|hide|item|lock|lookAt|markSeen|mode|move|orbit|panUp|particles|play|rotate|say|scale|scene|screen|setFlag|shake|show|sound|spin|stop|teleport|teleportPlayer|time|title|unlock|weather)\b"
+    },
+    {
+      "name": "variable.parameter.option.crystal",
+      "match": "\b(?:around|at|base|by|count|ease|extend|fade|fill|for|fov|item|level|lookAt|loop|name|over|pitch|pos|radius|rot|scale|scaleXZ|scaleY|speed|strength|subtitle|system|tag|to|var|volume|xrot|yaw|yrot)\b"
+    },
+    {
+      "name": "support.constant.easing.crystal",
+      "match": "\b(?:in|inBack|inBounce|inCirc|inCubic|inElastic|inExpo|inOut|inOutBack|inOutBounce|inOutCirc|inOutCubic|inOutElastic|inOutExpo|inOutQuad|inOutQuart|inOutQuint|inOutSine|inQuad|inQuart|inQuint|inSine|linear|out|outBack|outBounce|outCirc|outCubic|outElastic|outExpo|outQuad|outQuart|outQuint|outSine)\b"
+    },
+    {
+      "name": "keyword.operator.relative.crystal",
+      "match": "~"
+    },
+    {
+      "name": "punctuation.terminator.statement.crystal",
+      "match": ";"
+    },
+    {
+      "name": "support.variable.cast.crystal",
+      "match": "\b[A-Za-z_][A-Za-z0-9_]*(?=.[a-z][A-Za-z]*\b)"
+    }
+  ]
+}

@@ -13,7 +13,7 @@
 const { lex } = require("./lexer.js");
 const { CrystalSyntaxError } = require("../crystal/errors.js");
 const { textOf, snakeToCamel } = require("../crystal/text.js");
-const { resolveRef } = require("../crystal/refs.js");
+const { resolveRef, BARE_VALUE: BARE } = require("../crystal/refs.js");
 const { getVerb, matchVerb } = require("./verbs.js");
 
 function parse(source, filename, { ns = null } = {}) {
@@ -56,7 +56,15 @@ function parse(source, filename, { ns = null } = {}) {
     /** A `@ns:name` Crystal Ref (or, in older files, a plain string) for a slot of the given kind. */
     function parseRef(kind, ctx) {
         const t = peek();
-        if (t.type === "STR") return textOf(next());
+        if (t.type === "STR") {
+            const text = textOf(next());
+            // a string naming one of the project's own things is linked (and checked) just like a reference
+            if (ns && !BARE.has(kind) && text.startsWith(`${ns}:`)) {
+                links.push({ kind, ns, id: text, file: filename ?? null, line: t.line, col: t.col, source });
+                tokens.warnings.push({ line: t.line, col: t.col, message: `"${text}" names this project's ${kind}: write @:${text.slice(ns.length + 1)} (checked at build time)` });
+            }
+            return text;
+        }
         if (t.type !== "REF") return fail(`expected @namespace:name (or a quoted string) for ${ctx} but found ${describe(t)}`);
         next();
         let r;

@@ -68,7 +68,7 @@ test("packDefs reads definitions out of the finished pack JSON (entities, items,
 test("linkRefs: own-namespace refs must resolve (with a did-you-mean); other namespaces pass; blockOrItem accepts either", () => {
     const pack = { bp: new Map([["entities/a.json", JSON.stringify({ "minecraft:entity": { description: { identifier: "cw:mira" } } })], ["items/g.json", JSON.stringify({ "minecraft:item": { description: { identifier: "cw:gem" } } })]]) };
     const base = { pack, namespaces: ["cw"] };
-    assert.deepStrictEqual(linkRefs({ ...base, refs: [{ kind: "entity", ns: "cw", id: "cw:mira" }, { kind: "entity", ns: "minecraft", id: "minecraft:zombie" }, { kind: "blockOrItem", ns: "cw", id: "cw:gem" }, { kind: "scene", ns: "cw", id: "cw:shrine" }], defs: [{ kind: "scene", ns: "cw", id: "cw:shrine" }] }), { checked: 3 });
+    assert.strictEqual(linkRefs({ ...base, refs: [{ kind: "entity", ns: "cw", id: "cw:mira" }, { kind: "entity", ns: "minecraft", id: "minecraft:zombie" }, { kind: "blockOrItem", ns: "cw", id: "cw:gem" }, { kind: "scene", ns: "cw", id: "cw:shrine" }], defs: [{ kind: "scene", ns: "cw", id: "cw:shrine" }] }).checked, 3);
     const source = 'cast m = entity @:mria at (0, 0, 0)';
     assert.throws(() => linkRefs({ ...base, refs: [{ kind: "entity", ns: "cw", id: "cw:mria", file: "a.cinema", line: 1, col: 17, source }], defs: [] }), e => {
         assert.ok(e instanceof CrystalLinkError);
@@ -83,7 +83,7 @@ test("linkRefs: own-namespace refs must resolve (with a did-you-mean); other nam
 function modWith({ cinema, fmbe, rp = {} }) {
     // inside the repo tree: the entity DSL compiles with tsc, which wants the project next to the OpenRock sources
     const tmp = fs.mkdtempSync(path.join(__dirname, "fixtures", "tmp-refs-"));
-    fs.cpSync(path.join(__dirname, "fixtures", "ns-entity-mod"), tmp, { recursive: true });
+    fs.cpSync(path.join(__dirname, "fixtures", "ns-entity-mod"), tmp, { recursive: true, filter: f => !f.includes(".entity-dsl-dist") });
     const manifest = JSON.parse(fs.readFileSync(path.join(tmp, "openrock.mod.json"), "utf8"));
     manifest.content = { ...manifest.content, cinemaDsl: "cine", fmbeDsl: "fmbe", rpOverlayDir: "rp" };
     fs.writeFileSync(path.join(tmp, "openrock.mod.json"), JSON.stringify(manifest));
@@ -137,6 +137,42 @@ test("end to end: a typo fails the BUILD naming the file, line, column and the c
             assert.match(e.message, /c\.cinema:4:19: unknown scene @nem:shrne - did you mean @nem:shrine\?/);
             return true;
         });
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test("a plain string naming the project's own thing is linked too, with a nudge to use @", () => {
+    const c = parseCinema('cutscene "c" {\n  sound "cw:meow"\n  sound "elsewhere:x"\n  display scene s "shrine" at (0, 0, 0)\n  unlock\n}', "c.cinema", { ns: "cw" });
+    assert.deepStrictEqual(c.links.map(l => l.id), ["cw:meow"], "other namespaces and bare scene ids are not guessed at");
+    assert.match(c.warnings[0].message, /write @:meow/);
+});
+
+test("TSX dialects: a string that is exactly a reference becomes its id and is linked (kind: any)", () => {
+    const tmp = modWith({ rp: RP, fmbe: 'scene "x" {\n}\n', cinema: 'cutscene "c" {\n  lock cinematic\n  wait 1s\n  unlock\n}\n' });
+    try {
+        const file = path.join(tmp, "nav_test.entity.tsx");
+        const ref = '<RawComponent type="minecraft:test_ref" value={{ target: "@:spark" }} />';
+        const src = fs.readFileSync(file, "utf8").replace('<RawComponent type="minecraft:knockback_resistance"', ref + "\n        " + '<RawComponent type="minecraft:knockback_resistance"');
+        fs.writeFileSync(file, src);
+        const { bp } = build(tmp);
+        const entityDoc = [...bp].find(([k]) => k.startsWith("entities/"))[1].toString("utf8");
+        assert.ok(entityDoc.includes('"nem:spark"') && !entityDoc.includes("@:spark"), "resolved to the plain id");
+        fs.writeFileSync(file, src.replace("@:spark", "@:sprak"));
+        assert.throws(() => build(tmp), /entities\/[^\n]*\$[^\n]*unknown thing @nem:sprak - did you mean @nem:spark\?/);
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test("openrock refs lists what the project defines and where each thing is referenced", () => {
+    const { execFileSync } = require("child_process");
+    const cli = path.join(__dirname, "..", "bin", "openrock.js");
+    const tmp = modWith({ rp: RP, fmbe: 'scene "shrine" {\n}\n', cinema: 'cutscene "c" {\n  cast bot = entity @:waifu_nav at (0, 0, 0)\n  lock cinematic\n  sound @:meow\n  display scene s @:shrine at (0, 0, 0)\n  wait 1s\n  unlock\n}\n' });
+    try {
+        const out = execFileSync("node", [cli, "refs", tmp], { encoding: "utf8" });
+        assert.match(out, /entity \(1\)\n {2}@nem:waifu_nav {3}<- c\.cinema:2:/);
+        assert.match(out, /sound \(1\)\n {2}@nem:meow {3}<- c\.cinema:4:/);
+        assert.match(out, /particle \(1\)\n {2}@nem:spark\n/, "defined but unused shows no usages");
+        assert.match(out, /scene \(1\)\n {2}@nem:shrine {3}<- c\.cinema:5:/);
+        const json = JSON.parse(execFileSync("node", [cli, "refs", tmp, "--json", "--kind=entity"], { encoding: "utf8" }));
+        assert.deepStrictEqual(Object.keys(json.defined), ["entity"]);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 

@@ -61,11 +61,12 @@ const cmdInfo = require("../src/commands/info.js");
 const { cmdTranslate } = require("../src/commands/translate.js");
 const { cmdCinema } = require("../src/commands/cinema.js");
 const { cmdFmbe } = require("../src/commands/fmbe.js");
+const { cmdRefs } = require("../src/commands/refs.js");
 const { cmdScaffold } = require("../src/commands/scaffold.js");
 const { runPrebuild } = require("../src/commands/shared.js");
 
 const OPENROCK_ROOT = path.join(__dirname, "..");
-const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info", "translate", "cinema", "fmbe", "scaffold"];
+const COMMANDS = ["build", "check", "export", "deploy", "dev", "log", "debug", "info", "translate", "cinema", "fmbe", "refs", "scaffold"];
 
 async function main() {
     const args = process.argv.slice(2);
@@ -89,6 +90,7 @@ async function main() {
             case "translate": await cmdTranslate(positional[1], modDir, flags); break;
             case "cinema": await cmdCinema(positional[1], modDir, flags); break;
             case "fmbe": await cmdFmbe(positional[1], modDir, flags); break;
+            case "refs": cmdRefs(modDir, flags, OPENROCK_ROOT); break;
             case "scaffold": cmdScaffold(positional[1], flags, OPENROCK_ROOT); break;
             default:
                 console.log(`Usage: openrock <${COMMANDS.join("|")}> [modDir]`);

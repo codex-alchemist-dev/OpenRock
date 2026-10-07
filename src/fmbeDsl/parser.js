@@ -45,7 +45,14 @@ function parse(source, filename, { ns = null } = {}) {
     /** A block/item id: `@ns:name` (a checked Crystal Ref) or a quoted string. */
     function itemId(what) {
         const t = peek();
-        if (t.type === "STR") return next().value;
+        if (t.type === "STR") {
+            const text = next().value;
+            if (ns && text.startsWith(`${ns}:`)) {
+                links.push({ kind: "blockOrItem", ns, id: text, file: filename ?? null, line: t.line, col: t.col, source });
+                tokens.warnings.push({ line: t.line, col: t.col, message: `"${text}" names this project's block or item: write @:${text.slice(ns.length + 1)} (checked at build time)` });
+            }
+            return text;
+        }
         if (t.type !== "REF") return fail(`expected ${what}: @namespace:name or a quoted id, but found ${describe(t)}`);
         next();
         let r;
