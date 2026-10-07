@@ -81,8 +81,15 @@ intro.cinema:2:21: unknown entity @cw:mria - did you mean @cw:mira?
 - **Adding it to a language:** accept a `REF` token in the slots that name things, resolve it with `resolveRef`, and return the
   `refs` you read and the `defs` you define from your compiler. The linker (`src/crystal/refs.js`) does the rest.
 
-Crystal TSX dialects keep using `{{ns}}`-style template variables in their strings; those work in every Crystal language's
-output too.
+- **In the TSX dialects** (entity, block, item, manifest) a reference is a string that is exactly a reference - `"@:spark"` or
+  `"@nem:spark"` - anywhere in the document (an attribute, a component value, an event target). After compile it becomes the plain
+  `ns:name` id and is linked like any other (kind: any - it must name *something* the project defines). Template variables
+  (`{{ns}}`) work in every Crystal language's output too.
+- **A plain string that names your own thing** (`sound "cw:meow"`) is linked as well, with a nudge to write `@:meow`.
+- **`openrock refs [modDir] [--json] [--kind=entity]`** lists everything the project defines, by kind, and where each thing is
+  referenced from - find-usages for the whole pack.
+- **Editors:** `tools/vscode-crystal/` is a VS Code extension (generated from the compiler's verb registry) that highlights
+  `.cinema` and `.fmbe`, references included.
 
 ## Crystal TS
 

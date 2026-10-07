@@ -144,9 +144,11 @@ const cinema = createCinemaRuntime({
     hooks: { markSeen, setFlag, screenShow, screenHide, letterbox, say },   // all optional; see below
     emit: (name, { players }) => { /* script event */ },
 });
-cinema.play("first_meeting", [player], { onFinish: ({ state }) => {} });   // state: finished | skipped | stopped | errored
+cinema.play("first_meeting", [player], { onFinish: ({ state }) => {}, cast: { mira: existingEntity } });   // state: finished | skipped | stopped | errored
 cinema.skip(player);
 ```
+
+`cast` binds an entity that already exists (a summoned waifu) to a `cast name = entity ...` member, which is then used as is and never spawned or removed.
 
 **The guarantee:** whatever a cutscene changes - input permissions (restored to the values they had, not blindly to `true`), camera, fov, shake, fade, title, overlay, letterbox, displays, cast entities - is undone exactly once on every exit: finish, skip, stop, an op that throws, the player leaving, the player dying, `stopAll()`. An error in one cutscene ends only that cutscene (`onError`).
 
