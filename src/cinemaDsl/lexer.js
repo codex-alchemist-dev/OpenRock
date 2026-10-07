@@ -25,7 +25,7 @@ function codeFrame(source, line, col) {
     return `${gutter}${text}\n${" ".repeat(gutter.length + Math.max(0, col - 1))}^`;
 }
 
-const PUNCT = { "(": "LPAREN", ")": "RPAREN", "{": "LBRACE", "}": "RBRACE", ",": "COMMA", "=": "EQ", "+": "PLUS" };
+const PUNCT = { "(": "LPAREN", ")": "RPAREN", "{": "LBRACE", "}": "RBRACE", ",": "COMMA", "=": "EQ", "+": "PLUS", "~": "TILDE" };
 
 /** @returns {Array<{type: string, value?: any, line: number, col: number}>} */
 function lex(source, filename) {

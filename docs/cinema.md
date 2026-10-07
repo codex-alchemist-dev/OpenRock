@@ -15,6 +15,8 @@ A cutscene progresses on a **cursor** that starts at 0 ticks (one tick = 1/20 se
 
 Durations need a unit: `1.5s`, `500ms`, `20t`.
 
+**Relative coordinates:** any coordinate component may be `~` (the cutscene's start), `~3` or `~-2`: `(~2, ~, ~-4)` is 2 east and 4 north of where the first player stood when it began (their floored position; world axes, no rotation). That makes a cutscene reusable anywhere. Plain numbers stay absolute, and the two mix: `(100, ~1, ~)`.
+
 ## Structure
 
 ```

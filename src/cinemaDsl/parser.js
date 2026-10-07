@@ -34,11 +34,18 @@ function parse(source, filename) {
 
     function parseNumber() { return expect("NUM", "a number").value; }
 
+    // One coordinate component: `12.5` (absolute) or `~`, `~3`, `~-2` (relative to where the cutscene starts: {rel: n}).
+    function parseComponent() {
+        if (peek().type !== "TILDE") return parseNumber();
+        next();
+        return { rel: peek().type === "NUM" ? next().value : 0 };
+    }
+
     function parseCoord() {
         expect("LPAREN", "\"(\" starting a coordinate");
-        const x = parseNumber(); expect("COMMA", "\",\"");
-        const y = parseNumber(); expect("COMMA", "\",\"");
-        const z = parseNumber(); expect("RPAREN", "\")\"");
+        const x = parseComponent(); expect("COMMA", "\",\"");
+        const y = parseComponent(); expect("COMMA", "\",\"");
+        const z = parseComponent(); expect("RPAREN", "\")\"");
         return [x, y, z];
     }
 

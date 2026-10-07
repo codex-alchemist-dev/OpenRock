@@ -220,6 +220,15 @@ spawn_display "x" at screen(0.5, 0.4)
 unlock`)), /unknown command/);
 });
 
+test("relative coordinates: ~, ~n and ~-n parse to {rel} components, mixed with absolute numbers", () => {
+    const c = one(wrap(`lock cinematic
+camera cut to (~, ~2, ~-3)
+particles "p" at (10, ~1, 12)
+unlock`));
+    assert.deepStrictEqual(c.events[1].args.to, [{ rel: 0 }, { rel: 2 }, { rel: -3 }]);
+    assert.deepStrictEqual(c.events[2].args.at, [10, { rel: 1 }, 12]);
+});
+
 test("docs/cinema.md mentions every registered verb", () => {
     const { allVerbs } = require("../src/cinemaDsl/verbs.js");
     const doc = fs.readFileSync(path.join(__dirname, "..", "docs", "cinema.md"), "utf8");
