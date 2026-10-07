@@ -8,7 +8,7 @@ const { normalizeSpec, FmbeSpecError } = lib("spec.cjs");
 const { easeNames } = lib("ease.cjs");
 const { itemSupport } = lib("items.cjs");
 const { simulate } = lib("simulate.cjs");
-const { CinemaSyntaxError } = require("../cinemaDsl/lexer.js");
+const { CrystalSyntaxError } = require("../crystal/errors.js");
 
 const LOOPS = ["none", "repeat", "pingpong"];
 const BIG_SCENE = 100;
@@ -20,7 +20,7 @@ const BIG_SCENE = 100;
  */
 function compileProgram(ast, { source = "", filename = null } = {}) {
     const warnings = [];
-    const fail = (msg, node) => { throw new CinemaSyntaxError(msg, source, node.line, node.col, filename); };
+    const fail = (msg, node) => { throw new CrystalSyntaxError(msg, source, node.line, node.col, filename); };
     const warn = (msg, node) => warnings.push(`${filename ?? "fmbe"}:${node.line}:${node.col}: ${msg}`);
 
     const scenes = ast.scenes.map(scene => {
@@ -46,8 +46,8 @@ function compileProgram(ast, { source = "", filename = null } = {}) {
                     displays++;
                     const raw = { item: n.item, kind: n.kind, system: n.props.system };
                     if (n.props.base) raw.basepos = n.props.base;
-                    if (n.props.scalexz !== undefined) raw.scaleXZ = n.props.scalexz;
-                    if (n.props.scaley !== undefined) raw.scaleY = n.props.scaley;
+                    if (n.props.scaleXZ !== undefined) raw.scaleXZ = n.props.scaleXZ;
+                    if (n.props.scaleY !== undefined) raw.scaleY = n.props.scaleY;
                     if (n.props.extend) raw.extend = n.props.extend;
                     if (n.props.vars) raw.vars = n.props.vars;
                     if (n.props.tags) raw.tags = n.props.tags;

@@ -52,14 +52,14 @@ registerVerb("lock", { pos: [{ type: "ident", enum: ["cinematic", "position", "f
 registerVerb("unlock", { doc: "release camera and movement locks, restore control" });
 registerVerb("mode", { pos: [{ type: "ident", enum: ["none", "letterbox"], required: true }], doc: "letterbox bars (drawn by the game's UI hook)" });
 registerVerb("fade", { pos: [{ type: "ident", enum: ["in", "out"], required: true }, req("dur")] });
-registerVerb("camera cut", { kw: { to: req("coord"), look_at: "target", fov: "num" } });
-registerVerb("camera move", { kw: { to: req("coord"), over: req("dur"), ease, look_at: "target" }, durationKw: "over" });
-registerVerb("camera look_at", { pos: [req("target")], kw: { over: "dur", ease }, durationKw: "over" });
+registerVerb("camera cut", { kw: { to: req("coord"), lookAt: "target", fov: "num" } });
+registerVerb("camera move", { kw: { to: req("coord"), over: req("dur"), ease, lookAt: "target" }, durationKw: "over" });
+registerVerb("camera lookAt", { pos: [req("target")], kw: { over: "dur", ease }, durationKw: "over" });
 registerVerb("camera follow", { pos: [req("ident")] });
 registerVerb("camera orbit", { kw: { around: req("target"), radius: "num", speed: "num", over: req("dur") }, durationKw: "over" });
 registerVerb("camera shake", { kw: { strength: "num", for: req("dur") }, durationKw: "for" });
 registerVerb("camera fov", { pos: [req("num")], kw: { over: "dur", ease }, durationKw: "over" });
-registerVerb("camera pan_up", { kw: { over: req("dur"), ease }, durationKw: "over", doc: "tilt the camera up to look at the sky (pitch -90), keeping its yaw" });
+registerVerb("camera panUp", { kw: { over: req("dur"), ease }, durationKw: "over", doc: "tilt the camera up to look at the sky (pitch -90), keeping its yaw" });
 registerVerb("screen show", { pos: [req("str")], kw: { fill: "flag", fade: "dur" } });
 registerVerb("screen hide", { kw: { fade: "dur" } });
 // FMBE display entities (see docs/fmbe.md): any block or item, shown with its real model anywhere in the world.
@@ -91,15 +91,15 @@ registerVerb("sound", { pos: [req("str")], kw: { at: "coord", volume: "num", pit
 registerVerb("title", { pos: [req("str")], kw: { subtitle: "str", for: "dur", fade: "dur" }, durationKw: "for" });
 registerVerb("call", { pos: [req("str")], doc: "invoke a registered script function by name" });
 registerVerb("emit", { pos: [req("str")], doc: "emit a named script event" });
-registerVerb("mark_seen", { pos: [req("str")], doc: "mark a cutscene id as seen for the player" });
+registerVerb("markSeen", { pos: [req("str")], doc: "mark a cutscene id as seen for the player" });
 registerVerb("camera dolly", { kw: { by: req("coord"), over: req("dur") }, durationKw: "over" });
 registerVerb("weather", { pos: [{ type: "ident", enum: ["clear", "rain", "thunder"], required: true }] });
 registerVerb("time", { pos: [req("num")] });
-registerVerb("clear_effects", {});
-registerVerb("give_effect", { pos: [req("str")], kw: { for: "dur", level: "num" }, durationKw: "for" });
-registerVerb("teleport_player", { pos: [req("coord")] });
+registerVerb("clearEffects", {});
+registerVerb("giveEffect", { pos: [req("str")], kw: { for: "dur", level: "num" }, durationKw: "for" });
+registerVerb("teleportPlayer", { pos: [req("coord")] });
 registerVerb("heal", {});
-registerVerb("set_flag", { pos: [req("str")] });
+registerVerb("setFlag", { pos: [req("str")] });
 
 registerVerb("actor play", { actor: true, pos: [req("str")], kw: { loop: "flag" } });
 registerVerb("actor say", { actor: true, pos: [req("str")], kw: { for: "dur" }, durationKw: "for" });

@@ -18,12 +18,12 @@ function test(name, fn) {
 }
 const compile = (src, filename = "t.fmbe") => compileProgram(parse(src, filename), { source: src, filename });
 
-const ALTAR = `# an altar with a spinning gem ring
+const ALTAR = `// an altar with a spinning gem ring
 scene "altar" persist {
   display base block "minecraft:stone" at (0, 0, 0) scale 0.9
   group ring at (0, 1, 0) {
     display gem item "minecraft:diamond" at (1, 0, 0) rot (0, 45, 0) scale 0.5
-    display gem2 item "minecraft:diamond" at (-1, 0, 0) scale 0.5 system basic scalexz 1.5
+    display gem2 item "minecraft:diamond" at (-1, 0, 0) scale 0.5 system basic scaleXZ 1.5
   }
   display flower block2d "minecraft:red_flower" at (0, 8px, 0) base (0, 0, "v.wobble") extend scale 2 yrot 30 var "v.wobble" "math.sin(q.life_time*90)"
   anim spin on ring tween rot (0, 360, 0) over 4s loop repeat auto
@@ -59,7 +59,7 @@ test("errors point at the line and column with a code frame", () => {
     bad('scene "a" {\n  display x block "minecraft:stone"\n  display x block "minecraft:dirt"\n}', /display "x" is already defined/);
     bad('scene "a" {\n  group root {\n  }\n}', /"root" is reserved/);
     bad('scene "a" {\n  display x block "minecraft:stone" system static rot (0, "q.life_time", 0)\n}', /rot|number/);
-    bad('scene "a" {\n  display x block "minecraft:stone" scalexz 2\n}', /scaleXZ only exists in the basic system/);
+    bad('scene "a" {\n  display x block "minecraft:stone" scaleXZ 2\n}', /scaleXZ only exists in the basic system/);
     bad('scene "a" {\n  display x block "minecraft:shield"\n}', /cannot be shown with FMBE/);
     bad('scene "a" {\n  display x block "minecraft:stone"\n  anim a on y tween scale 2 over 1s\n}', /targets "y"/);
     bad('scene "a" {\n  display x block "minecraft:stone"\n  anim a on x tween scale 2 over 1s ease wobble\n}', /unknown easing "wobble"/);

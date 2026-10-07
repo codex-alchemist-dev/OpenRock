@@ -15,7 +15,7 @@ const { lintTimeline } = require("./lint.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
 
 const VIRTUAL_NAME = "openrock-cinema-data";
-const RUNTIME_FILES = ["lexer.js", "parser.js", "timeline.js", "verbs.js"].map(f => path.join(__dirname, f));
+const RUNTIME_FILES = ["lexer.js", "parser.js", "timeline.js", "verbs.js"].map(f => path.join(__dirname, f)).concat(["lexer.js", "errors.js", "text.js"].map(f => path.join(__dirname, "..", "crystal", f)));
 const compileCache = new Map();
 
 function emitDataModule(timelines) {
@@ -35,7 +35,9 @@ function compileCinemaDsl(cinemaDir) {
         const lintIssues = [];
         files.forEach((file, i) => {
             const source = fs.readFileSync(abs[i], "utf8");
-            const compiled = compileProgram(parse(source, file), { source, filename: file });
+            const program = parse(source, file);
+            for (const w of program.warnings ?? []) console.warn(`  WARNING: ${file}:${w.line}:${w.col}: ${w.message}`);
+            const compiled = compileProgram(program, { source, filename: file });
             for (const t of compiled) {
                 if (seenIds.has(t.id)) throw new Error(`duplicate cutscene id "${t.id}" in ${file} (already defined in ${seenIds.get(t.id)})`);
                 seenIds.set(t.id, file);

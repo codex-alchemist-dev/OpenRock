@@ -74,7 +74,7 @@ test("actor commands resolve against declared casts (even declared later) and ca
 });
 
 test("references to undeclared casts are errors with a code frame", () => {
-    throwsMsg(() => compile(wrap(`lock cinematic\ncamera cut to (0,0,0) look_at ghost\nunlock`)), /"ghost" is not a declared cast[\s\S]*\^/);
+    throwsMsg(() => compile(wrap(`lock cinematic\ncamera cut to (0,0,0) lookAt ghost\nunlock`)), /"ghost" is not a declared cast[\s\S]*\^/);
     throwsMsg(() => compile(wrap(`lock cinematic\nghost.play "x"\nunlock`)), /"ghost" is not a declared cast/);
 });
 
@@ -107,12 +107,12 @@ test("the full example from the plan parses and compiles", () => {
   cast mira = entity "openchara:mira" at (120, 64, -30)
   mode letterbox
   lock cinematic
-  camera cut to (118, 66, -25) look_at mira
+  camera cut to (118, 66, -25) lookAt mira
   wait 1.5s
-  camera move to (118, 65, -29) over 3s ease inOutSine look_at mira
+  camera move to (118, 65, -29) over 3s ease inOutSine lookAt mira
   mira.play "wave"
   wait 2s
-  camera pan_up over 0.6s ease in
+  camera panUp over 0.6s ease in
   screen show "space_bg" fill fade 0.3s
   display show robot block "minecraft:iron_block" at (140, 66, -10) scale 2 for 3s
   wait 3s
@@ -153,26 +153,26 @@ test("end-to-end: a mod with content.cinemaDsl bundles cutscenes into scripts/ma
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test("new verbs: camera dolly, weather, time, clear_effects, give_effect, teleport_player, heal, set_flag parse and compile", () => {
+test("new verbs: camera dolly, weather, time, clearEffects, giveEffect, teleportPlayer, heal, setFlag parse and compile", () => {
     const c = one(wrap(`lock cinematic
 camera dolly by (1, 2, 3) over 5s
 weather rain
 time 18000
-clear_effects
-give_effect "wither" for 10s level 2
-teleport_player (0, 64, 0)
+clearEffects
+giveEffect "wither" for 10s level 2
+teleportPlayer (0, 64, 0)
 heal
-set_flag "boss_defeated"
+setFlag "boss_defeated"
 unlock`));
     const opNames = c.events.map(e => e.op.split(".")[0] || e.op);
     assert.ok(opNames.includes("camera"), "camera commands grouped");
     assert.ok(opNames.includes("weather"));
     assert.ok(opNames.includes("time"));
-    assert.ok(opNames.includes("clear_effects"));
-    assert.ok(opNames.includes("give_effect"));
-    assert.ok(opNames.includes("teleport_player"));
+    assert.ok(opNames.includes("clearEffects"));
+    assert.ok(opNames.includes("giveEffect"));
+    assert.ok(opNames.includes("teleportPlayer"));
     assert.ok(opNames.includes("heal"));
-    assert.ok(opNames.includes("set_flag"));
+    assert.ok(opNames.includes("setFlag"));
     assert.ok(c.events.find(e => e.op === "camera.dolly")?.args.by);
 });
 

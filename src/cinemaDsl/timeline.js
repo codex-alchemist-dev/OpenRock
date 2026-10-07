@@ -12,7 +12,7 @@
 //  - Time may never go backwards outside `parallel`.
 "use strict";
 
-const { CinemaSyntaxError } = require("./lexer.js");
+const { CrystalSyntaxError } = require("../crystal/errors.js");
 const { getVerb } = require("./verbs.js");
 
 class CinemaCompileError extends Error {
@@ -20,7 +20,7 @@ class CinemaCompileError extends Error {
         super(message);
         this.name = "CinemaCompileError";
         if (node && source !== undefined) {
-            const e = new CinemaSyntaxError(message, source, node.line, node.col, filename);
+            const e = new CrystalSyntaxError(message, source, node.line, node.col, filename);
             this.message = e.message;
             this.cinemaLine = node.line;
             this.cinemaCol = node.col;

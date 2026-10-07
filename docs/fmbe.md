@@ -93,12 +93,14 @@ order), pass `handedness: -1` to the group; yaw-only groups do not depend on it.
 
 ## The DSL (`content.fmbeDsl`)
 
+Syntax is Crystal Core ([crystal.md](crystal.md#crystal-core-the-syntax-every-crystal-language-shares)): `//` comments, `;` or newline between statements, `{ }` blocks, camelCase options.
+
 ```
 scene "altar" persist {
   display base block "minecraft:stone" at (0, 0, 0) scale 0.9
   group ring at (0, 1, 0) {
     display gem item "minecraft:diamond" at (1, 0, 0) rot (0, 45, 0) scale 0.5
-    display gem2 item "minecraft:diamond" at (-1, 0, 0) scale 0.5 system basic scalexz 1.5
+    display gem2 item "minecraft:diamond" at (-1, 0, 0) scale 0.5 system basic scaleXZ 1.5
   }
   display flower block2d "minecraft:red_flower" at (0, 8px, 0) base (0, 0, "v.wobble") var "v.wobble" "math.sin(q.life_time*90)"
   anim spin on ring tween rot (0, 360, 0) over 4s loop repeat auto
@@ -106,7 +108,7 @@ scene "altar" persist {
 }
 ```
 
-* **display** `<name> <block|block2d|item> "<id>"` then any of `at (x,y,z)` `rot (x,y,z)` `scale n` `base (x,y,z)` `scalexz n` `scaley n` `system advanced|basic|static` `extend scale n xrot n yrot n` `var "v.name" <n|"molang">` `tag "t"` `name "n"`. `at`/`rot`/`scale` are local to the enclosing group. Numbers accept `px` (1/16 block); `base`, `scalexz`, `scaley`, `extend` and `var` accept quoted Molang.
+* **display** `<name> <block|block2d|item> "<id>"` then any of `at (x,y,z)` `rot (x,y,z)` `scale n` `base (x,y,z)` `scaleXZ n` `scaleY n` `system advanced|basic|static` `extend scale n xrot n yrot n` `var "v.name" <n|"molang">` `tag "t"` `name "n"`. `at`/`rot`/`scale` are local to the enclosing group. Numbers accept `px` (1/16 block); `base`, `scaleXZ`, `scaleY`, `extend` and `var` accept quoted Molang.
 * **group** `<name> [at rot scale] { ... }` - nest freely.
 * **anim** `<name> on <display|group> tween <pos|rot|scale|base|extend|item ...> over <2s|20t|500ms> [ease <name>] [loop repeat|pingpong] [steps n] [auto]`. A group animation may only tween `pos rot scale`; `auto` starts it when the scene spawns.
 

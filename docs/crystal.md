@@ -9,6 +9,41 @@ identity, not a language name. Before Crystal existed, each dialect below
 was only referred to by its OR-Track letter in conversation and code
 comments - real, working systems with no shared identity of their own.
 
+## Crystal Core: the syntax every Crystal language shares
+
+Every Crystal language - the TSX dialects below and the line-based languages (Crystal Cinema, Crystal FMBE, and any future
+one) - reads the same small set of lexical rules, so what you learn in one carries to the next. The TSX dialects get them
+because they ARE TypeScript; the line-based languages lex with one shared file, `src/crystal/lexer.js`, which is a deliberate
+subset of TypeScript's lexical grammar. `test/crystalCore.test.js` proves it by feeding the same literals to the shared lexer
+and to the TypeScript scanner and comparing what each one reads.
+
+| | Crystal Core |
+|---|---|
+| **Comments** | `// to end of line` and `/* ... */` (may span lines). `#` still works but warns |
+| **Strings** | `"double"` or `'single'` with JavaScript escapes (`\n \t é \u{1F600} \x41 \\ \"`, and `\` before a newline), or `` `backticks` `` which may span lines. `${...}` is an error |
+| **Numbers** | JavaScript literals: `12 1.5 .5 1e3 0xFF 1_000`; a leading `-` belongs to the number |
+| **Durations** | a number plus `s`, `ms` or `t` (`1.5s`, `250ms`, `20t`), always normalised to ticks |
+| **Statements** | end at a newline **or** a `;` - the same thing, so several can share a line. Blocks are `{ ... }` |
+| **Names** | keywords and options are `camelCase` (`lookAt`, `giveEffect`, `scaleXZ`), like the props of the TSX dialects. `snake_case` forms still parse and warn |
+| **Text** | in display text, a multi-line backtick string is dedented like JSX text: the line break after the opening backtick and the indentation-only line before the closing one are dropped, and the common indentation is removed |
+| **Errors** | one report shape everywhere: `file:line:col: message` plus a code frame (`CrystalSyntaxError`; TSX dialects get the same from `tsc`) |
+
+```cinema
+cutscene "intro" {
+  cast mira = entity "ns:mira" at (~2, ~, ~)
+  lock cinematic; wait 0.5s            // two statements, one line
+  mira.say `
+    Welcome back.
+      It has been a long time.
+  ` for 4s
+  unlock
+}
+```
+
+Adding a language to the family means lexing with `src/crystal/lexer.js` (passing only its own punctuation), reporting with
+`CrystalSyntaxError`, and registering a `DIRECTORY_DSLS` entry. Localization is not a Crystal language: it is spreadsheet/lang
+based and has no source syntax of its own.
+
 ## Crystal TS
 
 The shared foundation every Crystal Manifest-* dialect below is built on:

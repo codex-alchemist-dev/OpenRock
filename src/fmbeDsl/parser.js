@@ -17,16 +17,21 @@
 //         | { type:"anim",  name, target, channels, opts, line, col }
 "use strict";
 
-const { lex, CinemaSyntaxError } = require("../cinemaDsl/lexer.js");
+const { lex } = require("../crystal/lexer.js");
+const { CrystalSyntaxError } = require("../crystal/errors.js");
+const { textOf } = require("../crystal/text.js");
+
+const PUNCT = { "(": "LPAREN", ")": "RPAREN", "{": "LBRACE", "}": "RBRACE", ",": "COMMA" };
 
 const KINDS = ["block", "block2d", "item"];
+const LEGACY_PROPS = { scalexz: "scaleXZ", scaley: "scaleY" };
 
 function parse(source, filename) {
-    const tokens = lex(source, filename);
+    const tokens = lex(source, { filename, punct: PUNCT });
     let p = 0;
     const peek = (o = 0) => tokens[p + o];
     const next = () => tokens[p++];
-    const fail = (msg, tok = peek()) => { throw new CinemaSyntaxError(msg, source, tok.line, tok.col, filename); };
+    const fail = (msg, tok = peek()) => { throw new CrystalSyntaxError(msg, source, tok.line, tok.col, filename); };
     const describe = t => (t.type === "EOF" ? "end of file" : t.type === "NEWLINE" ? "end of line" : JSON.stringify(t.value));
     const expect = (type, what) => { const t = peek(); if (t.type !== type) fail(`expected ${what ?? type} but found ${describe(t)}`); return next(); };
     const skipNewlines = () => { while (peek().type === "NEWLINE") p++; };
@@ -40,7 +45,7 @@ function parse(source, filename) {
     /** A number, optionally with `px` (1/16 block), or a quoted Molang expression (a client-side formula). */
     function number({ molang = false, pxOk = true, what = "a number" } = {}) {
         const t = peek();
-        if (t.type === "STR" && molang) { next(); return t.value; }
+        if (t.type === "STR" && molang) { next(); return textOf(t); }
         const n = expect("NUM", what + (molang ? " or a quoted Molang expression" : "")).value;
         if (isWord(peek(), "px")) { if (!pxOk) fail("px is not valid here"); next(); return n / 16; }
         return n;
@@ -58,8 +63,8 @@ function parse(source, filename) {
         base: () => vec3({ molang: true, what: "a coordinate" }),
         rot: () => vec3({ pxOk: false, what: "an angle in degrees" }),
         scale: () => number({ pxOk: false }),
-        scalexz: () => number({ molang: true, pxOk: false }),
-        scaley: () => number({ molang: true, pxOk: false }),
+        scaleXZ: () => number({ molang: true, pxOk: false }),
+        scaleY: () => number({ molang: true, pxOk: false }),
         system: () => expect("IDENT", "a system name (advanced, basic or static)").value,
         tag: () => expect("STR", "a tag").value,
         name: () => expect("STR", "a name").value,
@@ -83,6 +88,10 @@ function parse(source, filename) {
         const out = {};
         while (peek().type === "IDENT") {
             const k = peek();
+            if (LEGACY_PROPS[k.value] && allowed.includes(LEGACY_PROPS[k.value])) {
+                tokens.warnings.push({ line: k.line, col: k.col, message: `\`${k.value}\` is deprecated - write \`${LEGACY_PROPS[k.value]}\` (Crystal keywords are camelCase)` });
+                k.value = LEGACY_PROPS[k.value];
+            }
             if (!allowed.includes(k.value)) fail(`"${k.value}" is not valid for ${ctx} - valid: ${allowed.join(", ")}`);
             next();
             const value = PROP_PARSERS[k.value]();
@@ -93,7 +102,7 @@ function parse(source, filename) {
         return out;
     }
 
-    const DISPLAY_PROPS = ["at", "base", "rot", "scale", "scalexz", "scaley", "system", "extend", "tag", "var", "name"];
+    const DISPLAY_PROPS = ["at", "base", "rot", "scale", "scaleXZ", "scaleY", "system", "extend", "tag", "var", "name"];
     const GROUP_PROPS = ["at", "rot", "scale"];
 
     function display() {
@@ -112,7 +121,7 @@ function parse(source, filename) {
         const name = expect("IDENT", "a name for the group").value;
         const pr = props(GROUP_PROPS, "a group");
         expect("LBRACE", "\"{\"");
-        endStatement();
+        if (peek().type === "NEWLINE") p++;
         const body = nodes(head);
         return { type: "group", name, props: pr, body, line: head.line, col: head.col };
     }
@@ -161,7 +170,7 @@ function parse(source, filename) {
             skipNewlines();
         }
         next();
-        endStatement();
+        if (peek().type === "NEWLINE") p++;
         return body;
     }
 
@@ -171,7 +180,7 @@ function parse(source, filename) {
         let persist = false;
         if (isWord(peek(), "persist")) { next(); persist = true; }
         expect("LBRACE", "\"{\"");
-        endStatement();
+        if (peek().type === "NEWLINE") p++;
         return { id, persist, line: head.line, col: head.col, body: nodes(head) };
     }
 
@@ -182,7 +191,7 @@ function parse(source, filename) {
         scenes.push(scene());
         skipNewlines();
     }
-    return { scenes };
+    return { scenes, warnings: tokens.warnings };
 }
 
 module.exports = { parse, KINDS };

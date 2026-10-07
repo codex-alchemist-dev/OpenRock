@@ -10,7 +10,9 @@
 //   cmd       { verb, actor?, args: {pos: any[], ...kw}, refs: [{name,line,col}] }
 "use strict";
 
-const { lex, CinemaSyntaxError } = require("./lexer.js");
+const { lex } = require("./lexer.js");
+const { CrystalSyntaxError } = require("../crystal/errors.js");
+const { textOf, snakeToCamel } = require("../crystal/text.js");
 const { getVerb, matchVerb } = require("./verbs.js");
 
 function parse(source, filename) {
@@ -18,7 +20,7 @@ function parse(source, filename) {
     let p = 0;
     const peek = (o = 0) => tokens[p + o];
     const next = () => tokens[p++];
-    const fail = (msg, tok = peek()) => { throw new CinemaSyntaxError(msg, source, tok.line, tok.col, filename); };
+    const fail = (msg, tok = peek()) => { throw new CrystalSyntaxError(msg, source, tok.line, tok.col, filename); };
     const describe = t => (t.type === "EOF" ? "end of file" : t.type === "NEWLINE" ? "end of line" : JSON.stringify(t.value));
     const expect = (type, what) => {
         const t = peek();
@@ -55,7 +57,7 @@ function parse(source, filename) {
         switch (spec.type) {
             case "num": return parseNumber();
             case "dur": return expect("DUR", `a duration with a unit (e.g. 1.5s, 20t, 500ms) for ${ctx}`).value;
-            case "str": return expect("STR", `a quoted string for ${ctx}`).value;
+            case "str": return textOf(expect("STR", `a quoted string for ${ctx}`));
             case "coord": return parseCoord();
             case "target":
                 if (t.type === "LPAREN") return parseCoord();
@@ -88,6 +90,11 @@ function parse(source, filename) {
             const words = [];
             for (let o = 0; peek(o).type === "IDENT" && o < 3; o++) words.push(peek(o).value);
             verb = matchVerb(words);
+            if (!verb) {
+                const camel = words.map(snakeToCamel);
+                verb = camel.join(" ") !== words.join(" ") ? matchVerb(camel) : null;
+                if (verb) tokens.warnings.push({ line: head.line, col: head.col, message: `\`${words.slice(0, verb.words.length).join(" ")}\` is deprecated - write \`${verb.name}\` (Crystal keywords are camelCase)` });
+            }
             if (!verb) fail(`unknown command ${describe(head)}`, head);
             p += verb.words.length;
         }
@@ -105,11 +112,16 @@ function parse(source, filename) {
         const seen = new Set();
         while (peek().type === "IDENT") {
             const k = next();
-            const spec = verb.kw[k.value];
+            let key = k.value;
+            if (!verb.kw[key] && verb.kw[snakeToCamel(key)]) {
+                tokens.warnings.push({ line: k.line, col: k.col, message: `\`${key}\` is deprecated - write \`${snakeToCamel(key)}\` (Crystal keywords are camelCase)` });
+                key = snakeToCamel(key);
+            }
+            const spec = verb.kw[key];
             if (!spec) fail(`"${k.value}" is not a valid option for "${verb.name}"${Object.keys(verb.kw).length ? " - valid: " + Object.keys(verb.kw).join(", ") : " (it takes no options)"}`, k);
-            if (seen.has(k.value)) fail(`option "${k.value}" given twice`, k);
-            seen.add(k.value);
-            args[k.value] = spec.type === "flag" ? true : parseValue(spec, refs, `${verb.name} ${k.value}`);
+            if (seen.has(key)) fail(`option "${key}" given twice`, k);
+            seen.add(key);
+            args[key] = spec.type === "flag" ? true : parseValue(spec, refs, `${verb.name} ${key}`);
         }
         for (const [k, spec] of Object.entries(verb.kw)) {
             if (spec.required && !seen.has(k)) fail(`"${verb.name}" requires "${k}"`, head);
@@ -120,7 +132,7 @@ function parse(source, filename) {
 
     function parseBlock() {
         expect("LBRACE", "\"{\"");
-        endStatement();
+        if (peek().type === "NEWLINE") p++;   // a statement may start right after `{` on the same line
         const body = [];
         skipNewlines();
         while (peek().type !== "RBRACE") {
@@ -129,7 +141,7 @@ function parse(source, filename) {
             skipNewlines();
         }
         next();
-        endStatement();
+        if (peek().type === "NEWLINE") p++;
         return body;
     }
 
@@ -194,7 +206,7 @@ function parse(source, filename) {
         cutscenes.push({ id, body, line: head.line, col: head.col });
         skipNewlines();
     }
-    return { cutscenes };
+    return { cutscenes, warnings: tokens.warnings };
 }
 
 module.exports = { parse };

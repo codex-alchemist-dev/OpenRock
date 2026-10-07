@@ -15,6 +15,17 @@ A cutscene progresses on a **cursor** that starts at 0 ticks (one tick = 1/20 se
 
 Durations need a unit: `1.5s`, `500ms`, `20t`.
 
+**Syntax** is Crystal Core ([crystal.md](crystal.md#crystal-core-the-syntax-every-crystal-language-shares)): `//` and `/* */` comments, `;` or a newline between statements, `"..."` strings with JavaScript escapes, and `` `backtick` `` strings for text that spans lines (indentation is stripped):
+
+```cinema
+mira.say `
+  Welcome back.
+  It has been a long time.
+` for 4s
+```
+
+Keywords are camelCase (`lookAt`, `panUp`, `giveEffect`, `clearEffects`, `teleportPlayer`, `markSeen`, `setFlag`); the old snake_case spellings still parse with a deprecation warning.
+
 **Relative coordinates:** any coordinate component may be `~` (the cutscene's start), `~3` or `~-2`: `(~2, ~, ~-4)` is 2 east and 4 north of where the first player stood when it began (their floored position; world axes, no rotation). That makes a cutscene reusable anywhere. Plain numbers stay absolute, and the two mix: `(100, ~1, ~)`.
 
 ## Structure
@@ -40,14 +51,14 @@ cutscene "id" {
 | `unlock` | | release locks and the camera |
 | `mode` | `none` \| `letterbox` | bars are drawn by the game (`hooks.letterbox`) |
 | `fade` | `in` \| `out`, `<dur>` | out = to black (held until `fade in`); in = from black |
-| `camera cut` | `to <coord>`, `look_at <target>`, `fov <n>` | instant |
-| `camera move` | `to <coord>`, `over <dur>`, `ease`, `look_at` | eased on the client; keeps the last look-at |
-| `camera look_at` | `<target>`, `over`, `ease` | turn in place |
+| `camera cut` | `to <coord>`, `lookAt <target>`, `fov <n>` | instant |
+| `camera move` | `to <coord>`, `over <dur>`, `ease`, `lookAt` | eased on the client; keeps the last look-at |
+| `camera lookAt` | `<target>`, `over`, `ease` | turn in place |
 | `camera follow` | `<cast>` | keep facing a cast member (re-aimed every 2 ticks) until the next camera instruction |
 | `camera orbit` | `around <target>`, `radius`, `speed`, `over <dur>` | circle at the current height; default one turn per duration |
 | `camera shake` | `strength <n>`, `for <dur>` | `camera.addShake` (max intensity 4) |
 | `camera fov` | `<n>`, `over`, `ease` | |
-| `camera pan_up` | `over`, `ease` | tilt to look at the sky |
+| `camera panUp` | `over`, `ease` | tilt to look at the sky |
 | `camera dolly` | `by <coord>`, `over <dur>` | relative translation |
 | `screen show` / `screen hide` | `"texture"`, `fill`, `fade` | UI belongs to the game: `hooks.screenShow/screenHide` |
 | `display show` | `<name> <block\|block2d\|item> "<id>" at <coord>`, `rot`, `scale`, `base`, `system`, `for` | FMBE display entity ([fmbe.md](fmbe.md)) |
@@ -64,12 +75,12 @@ cutscene "id" {
 | `title` | `"text"`, `subtitle`, `for`, `fade` | cleared on cleanup |
 | `weather` | `clear` \| `rain` \| `thunder` | |
 | `time` | `<ticks>` | `world.setTimeOfDay` |
-| `give_effect` / `clear_effects` | `"effect"`, `for`, `level` | level 1 = I |
-| `teleport_player` | `<coord>` | |
+| `giveEffect` / `clearEffects` | `"effect"`, `for`, `level` | level 1 = I |
+| `teleportPlayer` | `<coord>` | |
 | `heal` | | |
 | `call` | `"function"` | `functions[name](env, players)` |
 | `emit` | `"event"` | `emit(name, { players })` |
-| `mark_seen` / `set_flag` | `"id"` | `hooks.markSeen` / `hooks.setFlag` |
+| `markSeen` / `setFlag` | `"id"` | `hooks.markSeen` / `hooks.setFlag` |
 | `<cast>.play` | `"animation"`, `loop` | `entity.playAnimation` |
 | `<cast>.say` | `"text"`, `for` | `hooks.say`, else the action bar |
 | `<cast>.emote` | `"event"` | `entity.triggerEvent` - the entity decides |
@@ -90,15 +101,15 @@ cutscene "first_meeting" {
   mode letterbox
   lock cinematic
 
-  camera cut to (118, 66, -25) look_at mira
+  camera cut to (118, 66, -25) lookAt mira
   wait 1.5s
-  camera move to (118, 65, -29) over 3s ease inOutSine look_at mira
+  camera move to (118, 65, -29) over 3s ease inOutSine lookAt mira
   mira.play "wave"
   wait 2s
   display show gem item "minecraft:diamond" at (119, 66, -27) scale 0.6
   display spin gem by 720 over 4s ease inOutSine
   display move gem to (119, 67, -27) over 2s ease outSine
-  camera pan_up over 0.6s ease in
+  camera panUp over 0.6s ease in
   wait 4s
   display hide gem
   particles "robot_slash" at (140, 64, -10) count 50 for 2s
@@ -108,7 +119,7 @@ cutscene "first_meeting" {
 
   on skip {
     fade out 0.2s
-    mark_seen "first_meeting"
+    markSeen "first_meeting"
   }
 }
 ```
