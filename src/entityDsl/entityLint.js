@@ -88,9 +88,13 @@ function lintRenderControllerReferences(clientEntityDoc, renderControllerDocs, l
         Texture: new Set(Object.keys(desc.textures ?? {})),
     };
 
+    const listed = desc.render_controllers;
+    const used = Array.isArray(listed) ? new Set(listed.map(r => (typeof r === "string" ? r : Object.keys(r ?? {})[0]))) : null;
     for (const rcDoc of renderControllerDocs) {
         const controllers = rcDoc?.render_controllers ?? {};
         for (const [controllerName, controller] of Object.entries(controllers)) {
+            // Only the controllers THIS entity uses are held to its declared names (callers hand over every document in the pack).
+            if (used && !used.has(controllerName)) continue;
             const refs = [];
             if (typeof controller.geometry === "string") refs.push(controller.geometry);
             for (const m of controller.materials ?? []) for (const v of Object.values(m)) if (typeof v === "string") refs.push(v);
