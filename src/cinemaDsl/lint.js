@@ -30,10 +30,9 @@ function lintTimeline(timeline) {
     }
 
     if (eventsByOp["screen.show"]) {
-        const shows = new Set(eventsByOp["screen.show"].map(e => JSON.stringify(e.args)));
-        const hides = new Set(eventsByOp["screen.hide"]?.map(e => e.t) ?? []);
+        const hideTimes = (eventsByOp["screen.hide"] ?? []).map(e => e.t);
         for (const show of eventsByOp["screen.show"]) {
-            if (hides.size === 0) {
+            if (!hideTimes.some(t => t >= show.t)) {
                 warnings.push(`screen show at t=${show.t} never hidden - cutscene ends with screen visible`);
             }
         }

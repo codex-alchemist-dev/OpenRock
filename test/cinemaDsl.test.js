@@ -261,3 +261,11 @@ test("lint: warns on long cutscene, lock free, consecutive camera cuts, unpaired
 });
 
 console.log(`\n${passed} passed`);
+
+test("lint: a screen hide only counts when it comes after the show", () => {
+    const hideFirst = one(wrap(`screen hide\nwait 2s\nscreen show "bg"\nunlock`));
+    assert.ok(lintTimeline(hideFirst).some(w => w.includes("never hidden")));
+
+    const paired = one(wrap(`screen show "bg"\nwait 2s\nscreen hide\nunlock`));
+    assert.ok(!lintTimeline(paired).some(w => w.includes("never hidden")));
+});
