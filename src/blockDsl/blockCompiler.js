@@ -57,7 +57,7 @@ function compileBlockDsl(blockDslDir, { outDir } = {}) {
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
         const realOutDir = outDir ?? path.join(blockDslDir, ".block-dsl-dist");
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
-        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir }, include: sourceFiles };
+        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(blockDslDir).root }, include: sourceFiles };
         const tsconfigPath = path.join(blockDslDir, "tsconfig.block-dsl.json");
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {

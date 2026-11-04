@@ -128,7 +128,7 @@ function compileEntityDsl(entityDslDir, { outDir, vars } = {}) {
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
         const tsconfig = {
             ...template,
-            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, ...tsPaths("entity", entityDslDir) },
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(entityDslDir).root, ...tsPaths("entity", entityDslDir) },
             include: sourceFiles,
         };
         const tsconfigPath = path.join(entityDslDir, "tsconfig.entity-dsl.json");

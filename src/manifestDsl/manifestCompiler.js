@@ -66,7 +66,7 @@ function compileManifestDsl(manifestDslFile, { outDir } = {}) {
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
         const tsconfig = {
             ...template,
-            compilerOptions: { ...template.compilerOptions, outDir: realOutDir },
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(dir).root },
             include: [fileName],
         };
         const tsconfigPath = path.join(dir, "tsconfig.manifest-dsl.json");

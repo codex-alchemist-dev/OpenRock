@@ -52,7 +52,7 @@ function compileItemDsl(itemDslDir, { outDir, vars } = {}) {
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
         const realOutDir = outDir ?? path.join(itemDslDir, ".item-dsl-dist");
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
-        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir, ...tsPaths("item", itemDslDir) }, include: sourceFiles };
+        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(itemDslDir).root, ...tsPaths("item", itemDslDir) }, include: sourceFiles };
         const tsconfigPath = path.join(itemDslDir, "tsconfig.item-dsl.json");
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
