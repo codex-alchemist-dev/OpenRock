@@ -269,13 +269,37 @@ test("buildMod: a real unresolvable script import produces the intricate build-d
     }
 });
 
-test("collectEntries: a submodule dep that exists but has no OpenRock manifest (plain code like vendor/mclite) is skipped, so libs depending on capabilities/i18n resolve", () => {
+test("collectEntries: a submodule dep with an OpenRock manifest is collected (MCLite is a library since 8cb4462)", () => {
     const { collectEntries } = require("../src/buildPipeline.js");
     const { loadManifestFile } = require("../src/manifest.js");
     const root = path.join(__dirname, "..");
     const { manifest, dir } = loadManifestFile(path.join(root, "libs", "i18n"));
     const names = collectEntries(manifest, dir, { vendorDir: root, libraryDirs: resolveBundledLibraryDirs(root) }).map(e => e.manifest.name);
-    assert.deepStrictEqual(names, ["@openrock/i18n", "@openrock/capabilities"]);
+    assert.deepStrictEqual(names, ["@openrock/i18n", "@openrock/capabilities", "@mclite/core"]);
+});
+
+test("collectEntries: a submodule dep with NO OpenRock manifest (plain code) is skipped", () => {
+    const { collectEntries } = require("../src/buildPipeline.js");
+    const { loadManifestFile } = require("../src/manifest.js");
+    const os = require("os");
+    const fx = fs.mkdtempSync(path.join(os.tmpdir(), "openrock-plain-dep-"));
+    try {
+        // A consumer that depends on a submodule which has code but no openrock manifest.
+        fs.mkdirSync(path.join(fx, "plainlib"), { recursive: true });
+        fs.writeFileSync(path.join(fx, "plainlib", "index.js"), "module.exports = {};\n");
+        fs.mkdirSync(path.join(fx, "consumer"), { recursive: true });
+        fs.writeFileSync(path.join(fx, "consumer", "openrock.mod.json"), JSON.stringify({
+            openrockVersion: 1, kind: "mod", name: "consumer", version: "1.0.0", namespace: "cn",
+            packs: { behavior: { folder: "B", uuid: "a0000000-0000-0000-0000-000000000001", dataModuleUuid: "a0000000-0000-0000-0000-000000000002", scriptModuleUuid: "a0000000-0000-0000-0000-000000000003" },
+                     resource: { folder: "R", uuid: "a0000000-0000-0000-0000-000000000004", moduleUuid: "a0000000-0000-0000-0000-000000000005" } },
+            dependsOn: { "plainlib": { type: "submodule", path: "plainlib" } },
+        }));
+        const { manifest, dir } = loadManifestFile(path.join(fx, "consumer"));
+        const names = collectEntries(manifest, dir, { vendorDir: fx, libraryDirs: [] }).map(e => e.manifest.name);
+        assert.deepStrictEqual(names, ["consumer"], "the plain submodule contributes no entry");
+    } finally {
+        fs.rmSync(fx, { recursive: true, force: true });
+    }
 });
 
 Promise.all(asyncTests).then(() => console.log(`\n${passed} passed`));
