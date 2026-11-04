@@ -9,6 +9,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { commonAncestor } = require("../fsTree.js");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildManifestSet } = require("./manifestBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
@@ -66,7 +67,7 @@ function compileManifestDsl(manifestDslFile, { outDir } = {}) {
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
         const tsconfig = {
             ...template,
-            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(dir).root },
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: commonAncestor(dir, __dirname) },
             include: [fileName],
         };
         const tsconfigPath = path.join(dir, "tsconfig.manifest-dsl.json");

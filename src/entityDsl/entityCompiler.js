@@ -12,6 +12,7 @@ const { tsPaths, withAlias, withVars } = require("../dslAlias.js");
 
 const fs = require("fs");
 const path = require("path");
+const { commonAncestor } = require("../fsTree.js");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildEntity } = require("./entityBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
@@ -128,7 +129,7 @@ function compileEntityDsl(entityDslDir, { outDir, vars } = {}) {
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
         const tsconfig = {
             ...template,
-            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(entityDslDir).root, ...tsPaths("entity", entityDslDir) },
+            compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: commonAncestor(entityDslDir, __dirname), ...tsPaths("entity", entityDslDir) },
             include: sourceFiles,
         };
         const tsconfigPath = path.join(entityDslDir, "tsconfig.entity-dsl.json");

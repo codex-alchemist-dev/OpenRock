@@ -85,3 +85,13 @@ function mergeRegistry(base, add) {
 }
 
 module.exports = { walk, writeTree, MERGED_FILES, mergeRegistry };
+
+// Deepest directory that contains both paths. Used as an explicit tsconfig rootDir (TS 6 requires one) so the emitted
+// layout matches what TypeScript would infer, instead of forcing the filesystem root.
+function commonAncestor(a, b) {
+    const pa = path.resolve(a).split(path.sep), pb = path.resolve(b).split(path.sep);
+    const out = [];
+    for (let i = 0; i < Math.min(pa.length, pb.length) && pa[i] === pb[i]; i++) out.push(pa[i]);
+    return out.join(path.sep) || path.sep;
+}
+module.exports.commonAncestor = commonAncestor;

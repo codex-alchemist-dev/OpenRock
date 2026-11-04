@@ -7,6 +7,7 @@ const { tsPaths, withAlias, withVars } = require("../dslAlias.js");
 
 const fs = require("fs");
 const path = require("path");
+const { commonAncestor } = require("../fsTree.js");
 const { compileWithRealTsc, requireCompiled } = require(path.join(__dirname, "..", "..", "vendor", "minui", "src", "jsxCompile.js"));
 const { buildItem } = require("./itemBuilder.js");
 const { signatureForFiles, withCompileCache } = require("../devCache.js");
@@ -52,7 +53,7 @@ function compileItemDsl(itemDslDir, { outDir, vars } = {}) {
     return withCompileCache(compileCache, cacheKey, signature, [__dirname], () => {
         const realOutDir = outDir ?? path.join(itemDslDir, ".item-dsl-dist");
         const template = JSON.parse(fs.readFileSync(TEMPLATE_TSCONFIG, "utf8"));
-        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: path.parse(itemDslDir).root, ...tsPaths("item", itemDslDir) }, include: sourceFiles };
+        const tsconfig = { ...template, compilerOptions: { ...template.compilerOptions, outDir: realOutDir, rootDir: commonAncestor(itemDslDir, __dirname), ...tsPaths("item", itemDslDir) }, include: sourceFiles };
         const tsconfigPath = path.join(itemDslDir, "tsconfig.item-dsl.json");
         fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
         try {
